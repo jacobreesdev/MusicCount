@@ -54,6 +54,15 @@ struct RepairDecision: Equatable, Sendable {
         }
 
         let songIDs = Set(duplicateGroup.map(\.id))
+
+        guard retiredSongIDs.isSubset(of: songIDs) else {
+            throw RepairDecisionError.retiredSongNotInDuplicateGroup
+        }
+
+        guard excludedSongIDs.isSubset(of: songIDs) else {
+            throw RepairDecisionError.excludedSongNotInDuplicateGroup
+        }
+
         let expectedRetiredSongIDs = songIDs
             .subtracting([canonicalSongID])
             .subtracting(excludedSongIDs)
@@ -79,6 +88,8 @@ enum RepairDecisionError: Error, Equatable, Sendable {
     case duplicateGroupRequiresAtLeastTwoSongs
     case missingCanonicalSong
     case canonicalSongNotInDuplicateGroup
+    case retiredSongNotInDuplicateGroup
+    case excludedSongNotInDuplicateGroup
     case canonicalSongCannotBeRetired
     case canonicalSongCannotBeExcluded
     case includedSongMustBeRetired

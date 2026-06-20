@@ -106,6 +106,34 @@ struct RepairDecisionTests {
         }
     }
 
+    @Test("Rejects a Retired Song outside the Duplicate Group")
+    func rejectsRetiredSongOutsideDuplicateGroup() {
+        let canonicalSong = makeSong(id: 1, playCount: 50)
+        let lowerPlayCountSong = makeSong(id: 2, playCount: 20)
+
+        #expect(throws: RepairDecisionError.retiredSongNotInDuplicateGroup) {
+            try RepairDecision(
+                duplicateGroup: [canonicalSong, lowerPlayCountSong],
+                canonicalSongID: canonicalSong.id,
+                retiredSongIDs: [lowerPlayCountSong.id, 999]
+            )
+        }
+    }
+
+    @Test("Rejects an excluded Library Song outside the Duplicate Group")
+    func rejectsExcludedSongOutsideDuplicateGroup() {
+        let canonicalSong = makeSong(id: 1, playCount: 50)
+        let lowerPlayCountSong = makeSong(id: 2, playCount: 20)
+
+        #expect(throws: RepairDecisionError.excludedSongNotInDuplicateGroup) {
+            try RepairDecision(
+                duplicateGroup: [canonicalSong, lowerPlayCountSong],
+                canonicalSongID: canonicalSong.id,
+                excludedSongIDs: [999]
+            )
+        }
+    }
+
     @Test("Rejects an included non-canonical Library Song that is not retired")
     func rejectsIncludedSongMissingFromRetiredSongs() {
         let canonicalSong = makeSong(id: 1, playCount: 50)
