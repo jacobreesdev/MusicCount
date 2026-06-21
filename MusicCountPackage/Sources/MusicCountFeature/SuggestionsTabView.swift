@@ -12,6 +12,11 @@ struct SuggestionsTabView: View {
     @State private var completionErrorMessage = ""
     @State private var showingCompletionAlert = false
     @State private var showingCompletionErrorAlert = false
+    @State private var isRetryingPlaylistSync = false
+    @State private var playlistRetryMessage = ""
+    @State private var playlistRetryErrorMessage = ""
+    @State private var showingPlaylistRetryAlert = false
+    @State private var showingPlaylistRetryErrorAlert = false
     @Binding var selectedTab: Int
 
     private var filteredAndSortedSuggestions: [Suggestion] {
@@ -31,7 +36,9 @@ struct SuggestionsTabView: View {
     }
 
     private var hasRepairWork: Bool {
-        suggestionsService.activeRepairs.isEmpty == false || suggestionsService.activeSuggestions.isEmpty == false
+        suggestionsService.activeRepairs.isEmpty == false ||
+            suggestionsService.activeSuggestions.isEmpty == false ||
+            songsToRemovePlaylistService.syncProblem != nil
     }
 
     private var isShowingSearchEmptyState: Bool {
@@ -60,6 +67,16 @@ struct SuggestionsTabView: View {
             Button("OK", role: .cancel) { }
         } message: {
             Text(completionErrorMessage)
+        }
+        .alert("Playlist Sync Updated", isPresented: $showingPlaylistRetryAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(playlistRetryMessage)
+        }
+        .alert("Playlist Sync Failed", isPresented: $showingPlaylistRetryErrorAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(playlistRetryErrorMessage)
         }
     }
 
@@ -91,8 +108,35 @@ struct SuggestionsTabView: View {
 
     private var repairWorkList: some View {
         List {
+            if suggestionsService.activeRepairs.isEmpty,
+               let syncProblem = songsToRemovePlaylistService.syncProblem {
+                Section {
+                    PlaylistSyncProblemRow(
+                        problem: syncProblem,
+                        isRetrying: isRetryingPlaylistSync
+                    ) {
+                        Task {
+                            await retrySongsToRemovePlaylistSync()
+                        }
+                    }
+                } header: {
+                    Text("Songs to Remove Playlist")
+                }
+            }
+
             if suggestionsService.activeRepairs.isEmpty == false {
                 Section {
+                    if let syncProblem = songsToRemovePlaylistService.syncProblem {
+                        PlaylistSyncProblemRow(
+                            problem: syncProblem,
+                            isRetrying: isRetryingPlaylistSync
+                        ) {
+                            Task {
+                                await retrySongsToRemovePlaylistSync()
+                            }
+                        }
+                    }
+
                     ForEach(suggestionsService.activeRepairs) { activeRepair in
                         ActiveRepairRow(
                             activeRepair: activeRepair,
@@ -174,7 +218,9 @@ struct SuggestionsTabView: View {
         .contentMargins(.top, 0, for: .scrollContent)
         .accessibilityIdentifier(AccessibilityIdentifiers.Suggestions.suggestionsList)
         .overlay {
-            if suggestionsService.activeRepairs.isEmpty && filteredAndSortedSuggestions.isEmpty {
+            if suggestionsService.activeRepairs.isEmpty &&
+                filteredAndSortedSuggestions.isEmpty &&
+                songsToRemovePlaylistService.syncProblem == nil {
                 emptyStateView
             }
         }
@@ -223,6 +269,30 @@ struct SuggestionsTabView: View {
         }
     }
 
+    private func retrySongsToRemovePlaylistSync() async {
+        guard isRetryingPlaylistSync == false else { return }
+
+        isRetryingPlaylistSync = true
+        defer {
+            isRetryingPlaylistSync = false
+        }
+
+        let workflow = ActiveRepairPlaylistSyncWorkflow(
+            suggestionsService: suggestionsService,
+            songsToRemovePlaylistService: songsToRemovePlaylistService
+        )
+        let result = await workflow.resyncSongsToRemovePlaylist()
+
+        switch result {
+        case .synced:
+            playlistRetryMessage = "Songs to Remove Playlist is up to date."
+            showingPlaylistRetryAlert = true
+        case .failed(let message):
+            playlistRetryErrorMessage = message
+            showingPlaylistRetryErrorAlert = true
+        }
+    }
+
     private func completionMessage(for result: ActiveRepairCompletionWorkflowResult) -> String {
         let baseMessage = "\(result.completedRepair.suggestionTitle) was marked done. MusicCount will keep this Suggestion out of normal review."
 
@@ -240,6 +310,34 @@ struct SuggestionsTabView: View {
 }
 
 // MARK: - Active Repair Row
+
+private struct PlaylistSyncProblemRow: View {
+    let problem: SongsToRemovePlaylistSyncProblem
+    let isRetrying: Bool
+    let onRetry: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Songs to Remove Playlist May Be Stale", systemImage: "exclamationmark.triangle.fill")
+                .font(.headline)
+                .foregroundStyle(.orange)
+
+            Text(problem.message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            Button {
+                onRetry()
+            } label: {
+                Label(isRetrying ? "Retrying" : "Retry Playlist Sync", systemImage: isRetrying ? "hourglass" : "arrow.clockwise")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(isRetrying)
+        }
+        .padding(.vertical, 4)
+    }
+}
 
 private struct ActiveRepairRow: View {
     let activeRepair: ActiveRepair

@@ -126,6 +126,105 @@ struct SongsToRemovePlaylistServiceTests {
         #expect(client.createdPlaylists.isEmpty)
     }
 
+    @Test("Songs to Remove Playlist recreates a missing stored playlist from outstanding Active Repairs", .bug(id: 20))
+    func syncRecreatesMissingStoredPlaylistFromOutstandingActiveRepairs() async throws {
+        let client = FakeSongsToRemovePlaylistClient()
+        let store = FakeSongsToRemovePlaylistStore(playlistID: "missing-owned-playlist")
+        let activeRepair = makeActiveRepair(
+            id: "midnight-city-m83",
+            canonicalSong: makeSong(id: 1, title: "Midnight City", playCount: 140),
+            retiredSongs: [makeSong(id: 2, title: "Midnight City", playCount: 22)]
+        )
+        let service = SongsToRemovePlaylistService(client: client, store: store)
+
+        try await service.sync(activeRepairs: [activeRepair])
+
+        #expect(client.replacedPlaylists.isEmpty)
+        #expect(client.createdPlaylists.map(\.songIDs) == [[2]])
+        #expect(store.playlistID == "playlist-1")
+    }
+
+    @Test("Songs to Remove Playlist recreates a playlist when replacement finds the stored playlist missing", .bug(id: 20))
+    func syncRecreatesPlaylistWhenReplacementFindsStoredPlaylistMissing() async throws {
+        let storedPlaylist = SongsToRemovePlaylist(id: "owned-playlist", name: SongsToRemovePlaylistService.playlistName)
+        let client = FakeSongsToRemovePlaylistClient(
+            playlists: [storedPlaylist],
+            replaceItemsError: SongsToRemovePlaylistError.playlistNotFound(storedPlaylist.id)
+        )
+        let store = FakeSongsToRemovePlaylistStore(playlistID: storedPlaylist.id)
+        let activeRepair = makeActiveRepair(
+            id: "midnight-city-m83",
+            canonicalSong: makeSong(id: 1, title: "Midnight City", playCount: 140),
+            retiredSongs: [makeSong(id: 2, title: "Midnight City", playCount: 22)]
+        )
+        let service = SongsToRemovePlaylistService(client: client, store: store)
+
+        try await service.sync(activeRepairs: [activeRepair])
+
+        #expect(client.createdPlaylists.map(\.songIDs) == [[2]])
+        #expect(store.playlistID == "playlist-1")
+        #expect(service.syncProblem == nil)
+    }
+
+    @Test("Songs to Remove Playlist exposes stale state after sync failure", .bug(id: 20))
+    func syncFailureMarksPlaylistStale() async throws {
+        let storedPlaylist = SongsToRemovePlaylist(id: "owned-playlist", name: SongsToRemovePlaylistService.playlistName)
+        let client = FakeSongsToRemovePlaylistClient(
+            playlists: [storedPlaylist],
+            replaceItemsError: TestPlaylistSyncError.unavailable
+        )
+        let store = FakeSongsToRemovePlaylistStore(playlistID: storedPlaylist.id)
+        let activeRepair = makeActiveRepair(
+            id: "midnight-city-m83",
+            canonicalSong: makeSong(id: 1, title: "Midnight City", playCount: 140),
+            retiredSongs: [makeSong(id: 2, title: "Midnight City", playCount: 22)]
+        )
+        let service = SongsToRemovePlaylistService(client: client, store: store)
+
+        do {
+            try await service.sync(activeRepairs: [activeRepair])
+            Issue.record("Expected playlist sync failure to be thrown.")
+        } catch TestPlaylistSyncError.unavailable {
+            #expect(service.syncProblem?.message == "Playlist sync unavailable.")
+        } catch {
+            Issue.record("Wrong error thrown: \(error)")
+        }
+    }
+
+    @Test("Successful Songs to Remove Playlist sync clears stale state", .bug(id: 20))
+    func successfulSyncClearsStaleState() async throws {
+        let storedPlaylist = SongsToRemovePlaylist(id: "owned-playlist", name: SongsToRemovePlaylistService.playlistName)
+        let client = FakeSongsToRemovePlaylistClient(
+            playlists: [storedPlaylist],
+            replaceItemsError: TestPlaylistSyncError.unavailable
+        )
+        let store = FakeSongsToRemovePlaylistStore(playlistID: storedPlaylist.id)
+        let activeRepair = makeActiveRepair(
+            id: "midnight-city-m83",
+            canonicalSong: makeSong(id: 1, title: "Midnight City", playCount: 140),
+            retiredSongs: [makeSong(id: 2, title: "Midnight City", playCount: 22)]
+        )
+        let service = SongsToRemovePlaylistService(client: client, store: store)
+
+        do {
+            try await service.sync(activeRepairs: [activeRepair])
+            Issue.record("Expected playlist sync failure to be thrown.")
+        } catch TestPlaylistSyncError.unavailable {
+            #expect(service.syncProblem != nil)
+        } catch {
+            Issue.record("Wrong error thrown: \(error)")
+        }
+
+        client.replaceItemsError = nil
+
+        try await service.sync(activeRepairs: [activeRepair])
+
+        #expect(service.syncProblem == nil)
+        #expect(client.replacedPlaylists == [
+            .init(playlistID: storedPlaylist.id, songIDs: [2]),
+        ])
+    }
+
     @Test("Music item ID resolver keeps Retired Song order", .bug(id: 7))
     func musicItemIDResolverKeepsRetiredSongOrder() throws {
         let resolver = SongsToRemoveMusicItemIDResolver(
@@ -205,11 +304,16 @@ private final class FakeSongsToRemovePlaylistClient: SongsToRemovePlaylistClient
 
     private var playlistsByID: [String: SongsToRemovePlaylist]
     private var nextPlaylistNumber = 1
+    var replaceItemsError: (any Error)?
     private(set) var createdPlaylists: [CreatedPlaylist] = []
     private(set) var replacedPlaylists: [ReplacedPlaylist] = []
 
-    init(playlists: [SongsToRemovePlaylist] = []) {
+    init(
+        playlists: [SongsToRemovePlaylist] = [],
+        replaceItemsError: (any Error)? = nil
+    ) {
         playlistsByID = Dictionary(uniqueKeysWithValues: playlists.map { ($0.id, $0) })
+        self.replaceItemsError = replaceItemsError
     }
 
     func playlist(id: String) async throws -> SongsToRemovePlaylist? {
@@ -230,6 +334,10 @@ private final class FakeSongsToRemovePlaylistClient: SongsToRemovePlaylistClient
     }
 
     func replaceItems(in playlist: SongsToRemovePlaylist, with songIDs: [UInt64]) async throws {
+        if let replaceItemsError {
+            throw replaceItemsError
+        }
+
         replacedPlaylists.append(.init(playlistID: playlist.id, songIDs: songIDs))
     }
 }
@@ -248,5 +356,13 @@ private struct FakeSongsToRemoveMediaLibrary: SongsToRemoveMediaLibrary {
 
     func playbackStoreIDs(for songIDs: Set<UInt64>) -> [UInt64: String] {
         playbackStoreIDsByPersistentID.filter { songIDs.contains($0.key) }
+    }
+}
+
+private enum TestPlaylistSyncError: LocalizedError {
+    case unavailable
+
+    var errorDescription: String? {
+        "Playlist sync unavailable."
     }
 }

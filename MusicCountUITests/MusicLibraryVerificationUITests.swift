@@ -111,6 +111,37 @@ final class MusicLibraryVerificationUITests: XCTestCase {
         XCTAssertTrue(app.buttons["suggestions.activeRepair.done.shake it off-taylor swift"].waitForExistence(timeout: 5))
     }
 
+    @MainActor
+    func testPlaylistSyncFailureCanBeRetriedFromActiveRepairs() throws {
+        let app = XCUIApplication()
+        app.launchArguments.append(contentsOf: ["-MockData", "-MockActiveRepairs"])
+        app.launch()
+
+        app.tabBars.buttons["Suggestions"].tap()
+        XCTAssertTrue(app.searchFields["Search suggestions"].waitForExistence(timeout: 10))
+
+        let completedRepairDoneButton = app.buttons["suggestions.activeRepair.done.blinding lights-the weeknd"]
+        XCTAssertTrue(completedRepairDoneButton.waitForExistence(timeout: 10))
+        completedRepairDoneButton.tap()
+
+        let completionAlert = app.alerts["Repair Marked Done"]
+        XCTAssertTrue(completionAlert.waitForExistence(timeout: 10))
+        completionAlert.buttons["OK"].tap()
+
+        XCTAssertTrue(app.staticTexts["Songs to Remove Playlist May Be Stale"].waitForExistence(timeout: 5))
+
+        let retryButton = app.buttons["Retry Playlist Sync"]
+        XCTAssertTrue(retryButton.exists)
+
+        retryButton.tap()
+
+        let retryAlert = app.alerts["Playlist Sync Failed"]
+        XCTAssertTrue(retryAlert.waitForExistence(timeout: 10))
+        retryAlert.buttons["OK"].tap()
+
+        XCTAssertTrue(app.staticTexts["Songs to Remove Playlist May Be Stale"].exists)
+    }
+
     private func clearSearchField(_ searchField: XCUIElement, in app: XCUIApplication, deleting query: String) {
         let clearTextButton = app.buttons["Clear text"].firstMatch
         if clearTextButton.waitForExistence(timeout: 2) {

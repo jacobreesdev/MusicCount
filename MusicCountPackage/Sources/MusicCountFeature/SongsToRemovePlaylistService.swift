@@ -8,6 +8,10 @@ struct SongsToRemovePlaylist: Equatable, Sendable {
     let name: String
 }
 
+struct SongsToRemovePlaylistSyncProblem: Equatable, Sendable {
+    let message: String
+}
+
 @MainActor
 protocol SongsToRemovePlaylistClient {
     func playlist(id: String) async throws -> SongsToRemovePlaylist?
@@ -127,6 +131,7 @@ final class SongsToRemovePlaylistService {
 
     @ObservationIgnored private let client: any SongsToRemovePlaylistClient
     @ObservationIgnored private let store: any SongsToRemovePlaylistStore
+    private(set) var syncProblem: SongsToRemovePlaylistSyncProblem?
 
     init(
         client: any SongsToRemovePlaylistClient = MusicKitSongsToRemovePlaylistClient(),
@@ -137,15 +142,30 @@ final class SongsToRemovePlaylistService {
     }
 
     func sync(activeRepairs: [ActiveRepair]) async throws {
+        do {
+            try await syncPlaylist(activeRepairs: activeRepairs)
+            syncProblem = nil
+        } catch {
+            syncProblem = SongsToRemovePlaylistSyncProblem(message: error.localizedDescription)
+            throw error
+        }
+    }
+
+    private func syncPlaylist(activeRepairs: [ActiveRepair]) async throws {
         let songIDs = retiredSongIDs(from: activeRepairs)
 
         if let storedPlaylistID = store.playlistID {
             if let playlist = try await client.playlist(id: storedPlaylistID) {
-                try await client.replaceItems(in: playlist, with: songIDs)
-                return
+                do {
+                    try await client.replaceItems(in: playlist, with: songIDs)
+                    return
+                } catch let error as SongsToRemovePlaylistError {
+                    guard case .playlistNotFound = error else { throw error }
+                    store.playlistID = nil
+                }
+            } else {
+                store.playlistID = nil
             }
-
-            store.playlistID = nil
         }
 
         guard songIDs.isEmpty == false else { return }
