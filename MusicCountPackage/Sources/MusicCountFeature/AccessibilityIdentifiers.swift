@@ -28,6 +28,21 @@ enum AccessibilityIdentifiers {
         static let doneButton = "comparison.doneButton"
     }
 
+    // MARK: - Suggestion Repair View
+
+    enum SuggestionRepair {
+        static let scrollView = "suggestionRepair.scrollView"
+        static let buildRepairQueueButton = "suggestionRepair.buildRepairQueueButton"
+
+        static func canonicalSongButton(id: UInt64) -> String {
+            "suggestionRepair.canonicalSong.\(id)"
+        }
+
+        static func retiredSongToggle(id: UInt64) -> String {
+            "suggestionRepair.retiredSong.\(id)"
+        }
+    }
+
     // MARK: - Manual Queue View
 
     enum ManualQueue {

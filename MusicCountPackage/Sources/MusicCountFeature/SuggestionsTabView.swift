@@ -31,15 +31,9 @@ struct SuggestionsTabView: View {
         }
         .sheet(item: $selectedSuggestion) { suggestion in
             NavigationStack {
-                ComparisonView(
-                    song1: suggestion.lowestPlayCount,
-                    song2: suggestion.highestPlayCount,
-                    showingComparison: Binding(
-                        get: { selectedSuggestion != nil },
-                        set: { if !$0 { selectedSuggestion = nil } }
-                    ),
-                    selectedTab: $selectedTab
-                )
+                SuggestionRepairView(suggestion: suggestion) {
+                    selectedSuggestion = nil
+                }
             }
             .presentationDetents([.medium, .large])
         }
