@@ -115,6 +115,47 @@ struct SuggestionsServiceTests {
         #expect(service.allSuggestions.isEmpty) // Different artists, no duplicates
     }
 
+    @Test("Export-derived Library Song versions appear as one Suggestion", .bug(id: 15))
+    func analyzeSongsExportDerivedParentheticalVersion() throws {
+        let service = makeFreshService()
+        let songs = makeExportDerivedBeggedSongs()
+
+        service.analyzeSongs(songs)
+
+        let suggestion = try #require(service.allSuggestions.first)
+        #expect(service.allSuggestions.count == 1)
+        #expect(suggestion.sharedArtist == "Olivia Rodrigo")
+        #expect(suggestion.songs.map(\.id) == [12_735_721_974_494_978_572, 15_896_030_370_299_071_748])
+        #expect(suggestion.songs.map(\.title) == ["begged (Saturday Night Live 2026)", "begged"])
+        #expect(suggestion.playCountDifference == 31)
+    }
+
+    @Test("Parenthetical version titles do not merge across artists", .bug(id: 15))
+    func analyzeSongsParentheticalVersionsDifferentArtists() {
+        let service = makeFreshService()
+        let songs = [
+            makeSong(id: 1, title: "begged (Saturday Night Live 2026)", artist: "Olivia Rodrigo", playCount: 38),
+            makeSong(id: 2, title: "begged", artist: "Different Artist", playCount: 69),
+        ]
+
+        service.analyzeSongs(songs)
+
+        #expect(service.allSuggestions.isEmpty)
+    }
+
+    @Test("Parenthetical-only variants do not merge without a base title", .bug(id: 15))
+    func analyzeSongsParentheticalOnlyVariants() {
+        let service = makeFreshService()
+        let songs = [
+            makeSong(id: 1, title: "Intro (Part 1)", artist: "Example Artist", playCount: 5),
+            makeSong(id: 2, title: "Intro (Part 2)", artist: "Example Artist", playCount: 7),
+        ]
+
+        service.analyzeSongs(songs)
+
+        #expect(service.allSuggestions.isEmpty)
+    }
+
     // MARK: - Active Suggestions Tests
 
     @Test("Active suggestions sorted by play count difference")
@@ -377,5 +418,30 @@ struct SuggestionsServiceTests {
         service.dismissEntireGroup(title: "Hello", artist: "adele")
 
         #expect(service.activeSuggestions.isEmpty)
+    }
+
+    private func makeExportDerivedBeggedSongs() -> [SongInfo] {
+        [
+            SongInfo(
+                id: 12_735_721_974_494_978_572,
+                title: "begged (Saturday Night Live 2026)",
+                artist: "Olivia Rodrigo",
+                album: "begged (Saturday Night Live 2026) - Single",
+                playCount: 38,
+                hasAssetURL: true,
+                mediaType: "Music",
+                duration: 229.128
+            ),
+            SongInfo(
+                id: 15_896_030_370_299_071_748,
+                title: "begged",
+                artist: "Olivia Rodrigo",
+                album: "you seem pretty sad for a girl so in love",
+                playCount: 69,
+                hasAssetURL: true,
+                mediaType: "Music",
+                duration: 217.869
+            ),
+        ]
     }
 }

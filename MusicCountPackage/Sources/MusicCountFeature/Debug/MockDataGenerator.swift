@@ -2,14 +2,19 @@
 import Foundation
 import UIKit
 
-/// Generates SongInfo objects from mock data with real album artwork
+/// Generates SongInfo objects from the debug Library.xml export or fallback mock data.
 @MainActor
 final class MockDataGenerator {
     private let artworkFetcher = AlbumArtworkFetcher()
 
-    /// Generate complete mock library with real album artwork
+    /// Generate complete mock library data.
     /// - Returns: Array of SongInfo objects ready for display
     func generateMockLibrary() async -> [SongInfo] {
+        if let exportedSongs = LibraryXMLMockDataLoader.loadSongs() {
+            NSLog("Generated \(exportedSongs.count) mock songs from Library.xml")
+            return exportedSongs
+        }
+
         NSLog("📀 Generating mock library with real album artwork...")
 
         // Fetch all album artwork in parallel

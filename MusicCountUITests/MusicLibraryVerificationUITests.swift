@@ -1,6 +1,9 @@
 import XCTest
 
 final class MusicLibraryVerificationUITests: XCTestCase {
+    private let mockLibraryAnchorTitle = "hate that i made you love me"
+    private let suggestionSearchQuery = "begged"
+
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.
 
@@ -21,13 +24,19 @@ final class MusicLibraryVerificationUITests: XCTestCase {
         app.launch()
 
         XCTAssertFalse(app.staticTexts["Access Denied"].exists)
-        XCTAssertTrue(app.staticTexts["Blinding Lights"].waitForExistence(timeout: 20))
+        waitForMockLibraryToLoad(in: app)
         XCTAssertTrue(app.searchFields["Search songs"].exists)
 
         app.tabBars.buttons["Suggestions"].tap()
 
-        XCTAssertTrue(app.searchFields["Search suggestions"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["Blinding Lights"].waitForExistence(timeout: 10))
+        let searchField = app.searchFields["Search suggestions"]
+        XCTAssertTrue(searchField.waitForExistence(timeout: 10))
+        searchField.tap()
+        searchField.typeText(suggestionSearchQuery)
+
+        XCTAssertTrue(app.staticTexts["begged"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["begged (Saturday Night Live 2026)"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["2 versions"].waitForExistence(timeout: 5))
     }
 
     @MainActor
@@ -36,7 +45,7 @@ final class MusicLibraryVerificationUITests: XCTestCase {
         app.launchArguments.append(contentsOf: ["-MockData", "-ResetRepairState"])
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["Blinding Lights"].waitForExistence(timeout: 20))
+        waitForMockLibraryToLoad(in: app)
 
         let searchField = app.searchFields["Search songs"]
         XCTAssertTrue(searchField.exists)
@@ -53,7 +62,7 @@ final class MusicLibraryVerificationUITests: XCTestCase {
 
         clearSearchField(app.searchFields["Search songs"], in: app, deleting: noMatchQuery)
 
-        XCTAssertTrue(app.staticTexts["Blinding Lights"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts[mockLibraryAnchorTitle].waitForExistence(timeout: 5))
     }
 
     @MainActor
@@ -62,7 +71,7 @@ final class MusicLibraryVerificationUITests: XCTestCase {
         app.launchArguments.append(contentsOf: ["-MockData", "-ResetRepairState"])
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["Blinding Lights"].waitForExistence(timeout: 20))
+        waitForMockLibraryToLoad(in: app)
 
         app.tabBars.buttons["Suggestions"].tap()
         XCTAssertTrue(app.searchFields["Search suggestions"].waitForExistence(timeout: 10))
@@ -80,7 +89,9 @@ final class MusicLibraryVerificationUITests: XCTestCase {
 
         clearSearchField(app.searchFields["Search suggestions"], in: app, deleting: noMatchQuery)
 
-        XCTAssertTrue(app.staticTexts["Blinding Lights"].waitForExistence(timeout: 5))
+        searchField.tap()
+        searchField.typeText(suggestionSearchQuery)
+        XCTAssertTrue(app.staticTexts["begged"].waitForExistence(timeout: 5))
     }
 
     @MainActor
@@ -89,6 +100,7 @@ final class MusicLibraryVerificationUITests: XCTestCase {
         app.launchArguments.append(contentsOf: ["-MockData", "-MockActiveRepairs"])
         app.launch()
 
+        waitForMockLibraryToLoad(in: app)
         app.tabBars.buttons["Suggestions"].tap()
         XCTAssertTrue(app.searchFields["Search suggestions"].waitForExistence(timeout: 10))
 
@@ -117,6 +129,7 @@ final class MusicLibraryVerificationUITests: XCTestCase {
         app.launchArguments.append(contentsOf: ["-MockData", "-MockActiveRepairs"])
         app.launch()
 
+        waitForMockLibraryToLoad(in: app)
         app.tabBars.buttons["Suggestions"].tap()
         XCTAssertTrue(app.searchFields["Search suggestions"].waitForExistence(timeout: 10))
 
@@ -152,5 +165,12 @@ final class MusicLibraryVerificationUITests: XCTestCase {
                 searchField.typeText(XCUIKeyboardKey.delete.rawValue)
             }
         }
+    }
+
+    private func waitForMockLibraryToLoad(in app: XCUIApplication) {
+        XCTAssertTrue(
+            app.staticTexts[mockLibraryAnchorTitle].waitForExistence(timeout: 20),
+            "The full Library.xml mock data should load before navigating away from the Library tab."
+        )
     }
 }
