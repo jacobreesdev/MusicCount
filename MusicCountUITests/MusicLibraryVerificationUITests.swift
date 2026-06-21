@@ -24,9 +24,11 @@ final class MusicLibraryVerificationUITests: XCTestCase {
         app.launch()
 
         XCTAssertFalse(app.staticTexts["Access Denied"].exists)
+        waitForMockSuggestionsToLoad(in: app)
+
+        app.tabBars.buttons["Library"].tap()
         waitForMockLibraryToLoad(in: app)
         XCTAssertTrue(app.searchFields["Search songs"].exists)
-
         app.tabBars.buttons["Suggestions"].tap()
 
         let searchField = app.searchFields["Search suggestions"]
@@ -40,11 +42,47 @@ final class MusicLibraryVerificationUITests: XCTestCase {
     }
 
     @MainActor
+    func testSuggestionsFirstLaunchKeepsLibraryAvailableForManualQueueing() throws {
+        let app = XCUIApplication()
+        app.launchArguments.append(contentsOf: ["-MockData", "-ResetRepairState"])
+        app.launch()
+
+        waitForMockSuggestionsToLoad(in: app)
+
+        app.tabBars.buttons["Library"].tap()
+        waitForMockLibraryToLoad(in: app)
+
+        let searchField = app.searchFields["Search songs"]
+        XCTAssertTrue(searchField.exists)
+        searchField.tap()
+        searchField.typeText(mockLibraryAnchorTitle)
+
+        let song = app.staticTexts[mockLibraryAnchorTitle].firstMatch
+        XCTAssertTrue(song.waitForExistence(timeout: 5))
+        song.swipeLeft()
+        app.buttons["Select for Manual Queue"].tap()
+
+        let manualQueueButton = app.buttons["library.floatingActionButton"]
+        XCTAssertTrue(manualQueueButton.waitForExistence(timeout: 5))
+        XCTAssertEqual(manualQueueButton.label, "Manual Queue")
+        manualQueueButton.tap()
+
+        XCTAssertTrue(app.staticTexts["Manual Queue"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Manual Plays"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Add Manual Plays"].exists)
+        XCTAssertFalse(
+            app.staticTexts["Comparison"].exists,
+            "The secondary Library Song browser should not route selected songs through the old comparison repair path."
+        )
+    }
+
+    @MainActor
     func testLibraryNoResultsSearchKeepsSearchFieldReachable() throws {
         let app = XCUIApplication()
         app.launchArguments.append(contentsOf: ["-MockData", "-ResetRepairState"])
         app.launch()
 
+        app.tabBars.buttons["Library"].tap()
         waitForMockLibraryToLoad(in: app)
 
         let searchField = app.searchFields["Search songs"]
@@ -62,6 +100,10 @@ final class MusicLibraryVerificationUITests: XCTestCase {
 
         clearSearchField(app.searchFields["Search songs"], in: app, deleting: noMatchQuery)
 
+        let recoveredSearchField = app.searchFields["Search songs"]
+        recoveredSearchField.tap()
+        recoveredSearchField.typeText(mockLibraryAnchorTitle)
+
         XCTAssertTrue(app.staticTexts[mockLibraryAnchorTitle].waitForExistence(timeout: 5))
     }
 
@@ -71,9 +113,7 @@ final class MusicLibraryVerificationUITests: XCTestCase {
         app.launchArguments.append(contentsOf: ["-MockData", "-ResetRepairState"])
         app.launch()
 
-        waitForMockLibraryToLoad(in: app)
-
-        app.tabBars.buttons["Suggestions"].tap()
+        waitForMockSuggestionsToLoad(in: app)
         XCTAssertTrue(app.searchFields["Search suggestions"].waitForExistence(timeout: 10))
 
         let searchField = app.searchFields["Search suggestions"]
@@ -100,9 +140,7 @@ final class MusicLibraryVerificationUITests: XCTestCase {
         app.launchArguments.append(contentsOf: ["-MockData", "-MockActiveRepairs"])
         app.launch()
 
-        waitForMockLibraryToLoad(in: app)
-        app.tabBars.buttons["Suggestions"].tap()
-        XCTAssertTrue(app.searchFields["Search suggestions"].waitForExistence(timeout: 10))
+        waitForMockSuggestionsToLoad(in: app)
 
         let completedRepairDoneButton = app.buttons["suggestions.activeRepair.done.blinding lights-the weeknd"]
         XCTAssertTrue(completedRepairDoneButton.waitForExistence(timeout: 10))
@@ -129,9 +167,7 @@ final class MusicLibraryVerificationUITests: XCTestCase {
         app.launchArguments.append(contentsOf: ["-MockData", "-MockActiveRepairs"])
         app.launch()
 
-        waitForMockLibraryToLoad(in: app)
-        app.tabBars.buttons["Suggestions"].tap()
-        XCTAssertTrue(app.searchFields["Search suggestions"].waitForExistence(timeout: 10))
+        waitForMockSuggestionsToLoad(in: app)
 
         let completedRepairDoneButton = app.buttons["suggestions.activeRepair.done.blinding lights-the weeknd"]
         XCTAssertTrue(completedRepairDoneButton.waitForExistence(timeout: 10))
@@ -169,8 +205,15 @@ final class MusicLibraryVerificationUITests: XCTestCase {
 
     private func waitForMockLibraryToLoad(in app: XCUIApplication) {
         XCTAssertTrue(
-            app.staticTexts[mockLibraryAnchorTitle].waitForExistence(timeout: 20),
-            "The full Library.xml mock data should load before navigating away from the Library tab."
+            app.searchFields["Search songs"].waitForExistence(timeout: 20),
+            "The full Library.xml mock data should load before Library interactions run."
+        )
+    }
+
+    private func waitForMockSuggestionsToLoad(in app: XCUIApplication) {
+        XCTAssertTrue(
+            app.searchFields["Search suggestions"].waitForExistence(timeout: 20),
+            "MusicCount should launch into Suggestions as the primary repair surface."
         )
     }
 }

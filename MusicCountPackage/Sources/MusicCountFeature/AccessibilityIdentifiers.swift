@@ -16,18 +16,6 @@ enum AccessibilityIdentifiers {
         }
     }
 
-    // MARK: - Comparison View
-
-    enum Comparison {
-        static let scrollView = "comparison.scrollView"
-        static let song1Card = "comparison.song1Card"
-        static let song2Card = "comparison.song2Card"
-        static let matchModeButton = "comparison.matchModeButton"
-        static let addModeButton = "comparison.addModeButton"
-        static let tooltip = "comparison.tooltip"
-        static let doneButton = "comparison.doneButton"
-    }
-
     // MARK: - Suggestion Repair View
 
     enum SuggestionRepair {

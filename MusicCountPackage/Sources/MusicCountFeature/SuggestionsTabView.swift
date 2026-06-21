@@ -2,6 +2,7 @@ import SwiftUI
 
 @MainActor
 struct SuggestionsTabView: View {
+    @Environment(MusicLibraryService.self) private var musicLibraryService
     @Environment(SuggestionsService.self) private var suggestionsService
     @Environment(SongsToRemovePlaylistService.self) private var songsToRemovePlaylistService
     @State private var selectedSuggestion: Suggestion?
@@ -17,7 +18,6 @@ struct SuggestionsTabView: View {
     @State private var playlistRetryErrorMessage = ""
     @State private var showingPlaylistRetryAlert = false
     @State private var showingPlaylistRetryErrorAlert = false
-    @Binding var selectedTab: Int
 
     private var filteredAndSortedSuggestions: [Suggestion] {
         let filtered: [Suggestion]
@@ -80,7 +80,57 @@ struct SuggestionsTabView: View {
         }
     }
 
+    @ViewBuilder
     private var contentView: some View {
+        Group {
+            switch musicLibraryService.authorizationState {
+            case .notDetermined:
+                loadingView(
+                    title: "Requesting Permission",
+                    message: "Please allow access to your music library when prompted."
+                )
+            case .denied:
+                unavailableView(
+                    title: "Access Denied",
+                    message: "Music library access was denied. Please enable it in Settings > Privacy & Security > Media & Apple Music.",
+                    systemImage: "exclamationmark.triangle",
+                    color: .red
+                )
+            case .restricted:
+                unavailableView(
+                    title: "Access Restricted",
+                    message: "Music library access is restricted by device policies or parental controls.",
+                    systemImage: "lock.shield",
+                    color: .orange
+                )
+            case .authorized:
+                authorizedContentView
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var authorizedContentView: some View {
+        switch musicLibraryService.loadingState {
+        case .idle, .loading:
+            loadingView(
+                title: "Loading Music Library",
+                message: "Finding Duplicate Groups with Play Count Gaps."
+            )
+        case .loaded:
+            repairContentView
+        case .error(let message):
+            unavailableView(
+                title: "Library Unavailable",
+                message: message,
+                systemImage: "exclamationmark.circle",
+                color: .orange
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var repairContentView: some View {
         Group {
             if hasRepairWork == false {
                 emptyStateView
@@ -104,6 +154,44 @@ struct SuggestionsTabView: View {
                     }
             }
         }
+    }
+
+    private func loadingView(title: String, message: String) -> some View {
+        VStack(spacing: 20) {
+            ProgressView()
+                .scaleEffect(1.5)
+
+            Text(title)
+                .font(.title2.weight(.semibold))
+
+            Text(message)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal)
+        }
+        .padding()
+    }
+
+    private func unavailableView(
+        title: String,
+        message: String,
+        systemImage: String,
+        color: Color
+    ) -> some View {
+        VStack(spacing: 20) {
+            Image(systemName: systemImage)
+                .font(.system(size: 80))
+                .foregroundStyle(color)
+
+            Text(title)
+                .font(.title2.weight(.semibold))
+
+            Text(message)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal)
+        }
+        .padding()
     }
 
     private var repairWorkList: some View {

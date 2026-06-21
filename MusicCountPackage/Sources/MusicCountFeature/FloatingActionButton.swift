@@ -50,8 +50,8 @@ struct FloatingActionButton: View {
         .buttonStyle(ScaleButtonStyle())
         .padding(.bottom, 16)
         .accessibilityIdentifier(AccessibilityIdentifiers.Library.floatingActionButton)
-        .accessibilityLabel("Compare songs")
-        .accessibilityHint("\(selectedCount) of 2 songs selected")
+        .accessibilityLabel(buttonText)
+        .accessibilityHint(isEnabled ? "Open manual queueing for the selected Library Song" : "Select one Library Song")
         .accessibilityAddTraits(isEnabled ? [] : .isButton)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: selectedCount)
         .animation(.easeInOut(duration: 0.2), value: isEnabled)
@@ -60,11 +60,9 @@ struct FloatingActionButton: View {
     private var buttonText: String {
         switch selectedCount {
         case 0:
-            return "Make Selection"
-        case 1:
-            return "Queue Multiple Plays"
+            return "Select Library Song"
         default:
-            return "Compare Songs"
+            return "Manual Queue"
         }
     }
 
@@ -72,10 +70,8 @@ struct FloatingActionButton: View {
         switch selectedCount {
         case 0:
             return "hand.tap.fill"
-        case 1:
-            return "plus.circle.fill"
         default:
-            return "chart.bar.fill"
+            return "plus.circle.fill"
         }
     }
 }
