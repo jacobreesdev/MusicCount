@@ -92,7 +92,7 @@ final class SuggestionsService: Sendable {
     func createActiveRepair(from decision: RepairDecision, for suggestion: Suggestion) throws -> ActiveRepair {
         let key = suggestionKey(title: suggestion.sharedTitle, artist: suggestion.sharedArtist)
 
-        guard activeRepairs.contains(where: { $0.id == key }) == false else {
+        guard hasActiveRepair(id: key) == false else {
             throw ActiveRepairError.alreadyExists
         }
 
@@ -107,6 +107,12 @@ final class SuggestionsService: Sendable {
         activeRepairs.append(activeRepair)
         saveActiveRepairs()
         return activeRepair
+    }
+
+    /// Returns whether the Suggestion already has an Active Repair.
+    func hasActiveRepair(for suggestion: Suggestion) -> Bool {
+        let key = suggestionKey(title: suggestion.sharedTitle, artist: suggestion.sharedArtist)
+        return hasActiveRepair(id: key)
     }
 
     /// Clears all dismissals, restoring suggestions to the active list.
@@ -125,6 +131,10 @@ final class SuggestionsService: Sendable {
 
     private func suggestionKey(title: String, artist: String) -> String {
         "\(normalizeTitle(title))-\(normalizeArtist(artist))"
+    }
+
+    private func hasActiveRepair(id: String) -> Bool {
+        activeRepairs.contains { $0.id == id }
     }
 
     private func loadDismissedKeys() {

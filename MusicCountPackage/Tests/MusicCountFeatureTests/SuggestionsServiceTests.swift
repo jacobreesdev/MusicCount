@@ -179,6 +179,24 @@ struct SuggestionsServiceTests {
         #expect(service.activeRepairs.count == 1)
     }
 
+    @Test("Active Repair preflight detects duplicate state before queue mutation", .bug(id: 5))
+    func detectsExistingActiveRepairBeforeQueueMutation() throws {
+        let service = makeFreshService()
+        let songs = [
+            makeSong(id: 1, title: "Midnight City", artist: "M83", playCount: 140),
+            makeSong(id: 2, title: "Midnight City", artist: "M83", playCount: 22),
+        ]
+        service.analyzeSongs(songs)
+        let suggestion = try #require(service.activeSuggestions.first)
+        let repairModel = try SuggestionRepairModel(suggestion: suggestion)
+
+        #expect(service.hasActiveRepair(for: suggestion) == false)
+
+        _ = try service.createActiveRepair(from: repairModel.decision, for: suggestion)
+
+        #expect(service.hasActiveRepair(for: suggestion))
+    }
+
     @Test("Active Repair state survives a new service instance", .bug(id: 5))
     func activeRepairSurvivesNewServiceInstance() throws {
         defer {
