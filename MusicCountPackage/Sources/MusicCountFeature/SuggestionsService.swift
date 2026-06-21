@@ -53,13 +53,7 @@ final class SuggestionsService: Sendable {
 
     /// Groups songs by normalized title/artist and creates suggestions for duplicates.
     func analyzeSongs(_ songs: [SongInfo]) {
-        // Group songs by normalized title AND artist
-        var titleArtistGroups: [String: [SongInfo]] = [:]
-
-        for song in songs {
-            let groupKey = suggestionKey(title: song.title, artist: song.artist)
-            titleArtistGroups[groupKey, default: []].append(song)
-        }
+        let titleArtistGroups = groupSongsBySuggestionKey(songs)
 
         // Create suggestions for groups with 2+ versions
         allSuggestions = titleArtistGroups.compactMap { _, songsInGroup in
@@ -78,6 +72,34 @@ final class SuggestionsService: Sendable {
                 songs: sortedSongs
             )
         }
+    }
+
+    private func groupSongsBySuggestionKey(_ songs: [SongInfo]) -> [String: [SongInfo]] {
+        var exactGroups: [String: [SongInfo]] = [:]
+        for song in songs {
+            let groupKey = suggestionKey(title: song.title, artist: song.artist)
+            exactGroups[groupKey, default: []].append(song)
+        }
+
+        var mergedGroups = exactGroups
+
+        for (groupKey, songsInGroup) in exactGroups {
+            guard
+                let firstSong = songsInGroup.first,
+                let baseTitle = titleWithoutTrailingParenthetical(firstSong.title)
+            else { continue }
+
+            let baseGroupKey = suggestionKey(title: baseTitle, artist: firstSong.artist)
+
+            guard baseGroupKey != groupKey, exactGroups[baseGroupKey] != nil else {
+                continue
+            }
+
+            mergedGroups[baseGroupKey, default: []].append(contentsOf: songsInGroup)
+            mergedGroups[groupKey] = nil
+        }
+
+        return mergedGroups
     }
 
     /// Dismisses a single song version from a suggestion group.
@@ -147,6 +169,18 @@ final class SuggestionsService: Sendable {
 
     private func normalizeTitle(_ title: String) -> String {
         title.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func titleWithoutTrailingParenthetical(_ title: String) -> String? {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedTitle.hasSuffix(")"), let openingParenthesisIndex = trimmedTitle.lastIndex(of: "(") else {
+            return nil
+        }
+
+        let baseTitle = trimmedTitle[..<openingParenthesisIndex]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return baseTitle.isEmpty ? nil : String(baseTitle)
     }
 
     private func normalizeArtist(_ artist: String) -> String {
