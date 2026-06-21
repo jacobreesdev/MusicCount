@@ -80,6 +80,46 @@ struct SongInfo: Identifiable, Equatable, @unchecked Sendable {
     }
 }
 
+extension SongInfo: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case artist
+        case album
+        case playCount
+        case hasAssetURL
+        case mediaType
+        case duration
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decode(UInt64.self, forKey: .id),
+            title: try container.decode(String.self, forKey: .title),
+            artist: try container.decode(String.self, forKey: .artist),
+            album: try container.decode(String.self, forKey: .album),
+            playCount: try container.decode(Int.self, forKey: .playCount),
+            hasAssetURL: try container.decode(Bool.self, forKey: .hasAssetURL),
+            mediaType: try container.decode(String.self, forKey: .mediaType),
+            duration: try container.decode(TimeInterval.self, forKey: .duration),
+            artworkImage: nil
+        )
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encode(artist, forKey: .artist)
+        try container.encode(album, forKey: .album)
+        try container.encode(playCount, forKey: .playCount)
+        try container.encode(hasAssetURL, forKey: .hasAssetURL)
+        try container.encode(mediaType, forKey: .mediaType)
+        try container.encode(duration, forKey: .duration)
+    }
+}
+
 /// Aggregate statistics for a collection of songs.
 struct LibraryStats: Sendable {
     let totalSongs: Int

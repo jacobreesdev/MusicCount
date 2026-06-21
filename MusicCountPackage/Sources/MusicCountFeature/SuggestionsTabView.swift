@@ -24,6 +24,10 @@ struct SuggestionsTabView: View {
         return sortOption.sorted(filtered)
     }
 
+    private var hasVisibleRepairWork: Bool {
+        suggestionsService.activeRepairs.isEmpty == false || filteredAndSortedSuggestions.isEmpty == false
+    }
+
     var body: some View {
         NavigationStack {
             contentView
@@ -41,21 +45,23 @@ struct SuggestionsTabView: View {
 
     private var contentView: some View {
         Group {
-            if filteredAndSortedSuggestions.isEmpty {
+            if hasVisibleRepairWork == false {
                 emptyStateView
                     .toolbar(.hidden, for: .navigationBar)
             } else {
-                suggestionsList
+                repairWorkList
                     .toolbar {
-                        ToolbarItem(placement: .primaryAction) {
-                            Menu {
-                                Picker("Sort", selection: $sortOption) {
-                                    ForEach(SuggestionSortOption.allCases) { option in
-                                        Label(option.displayName, systemImage: option.icon(isSelected: option == sortOption)).tag(option)
+                        if filteredAndSortedSuggestions.isEmpty == false {
+                            ToolbarItem(placement: .primaryAction) {
+                                Menu {
+                                    Picker("Sort", selection: $sortOption) {
+                                        ForEach(SuggestionSortOption.allCases) { option in
+                                            Label(option.displayName, systemImage: option.icon(isSelected: option == sortOption)).tag(option)
+                                        }
                                     }
+                                } label: {
+                                    Label("Sort", systemImage: "arrow.up.arrow.down")
                                 }
-                            } label: {
-                                Label("Sort", systemImage: "arrow.up.arrow.down")
                             }
                         }
                     }
@@ -63,8 +69,19 @@ struct SuggestionsTabView: View {
         }
     }
 
-    private var suggestionsList: some View {
+    private var repairWorkList: some View {
         List {
+            if suggestionsService.activeRepairs.isEmpty == false {
+                Section {
+                    ForEach(suggestionsService.activeRepairs) { activeRepair in
+                        ActiveRepairRow(activeRepair: activeRepair)
+                    }
+                } header: {
+                    Text("Active Repairs")
+                        .accessibilityIdentifier(AccessibilityIdentifiers.Suggestions.activeRepairsSection)
+                }
+            }
+
             ForEach(filteredAndSortedSuggestions) { suggestion in
                 Section {
                     if suggestion.canDismissIndividualSongs {
@@ -128,6 +145,7 @@ struct SuggestionsTabView: View {
         .scrollContentBackground(.hidden)
         .background(Color(.systemGroupedBackground))
         .contentMargins(.top, 0, for: .scrollContent)
+        .accessibilityIdentifier(AccessibilityIdentifiers.Suggestions.suggestionsList)
         .searchable(text: $searchText, placement: .automatic, prompt: "Search suggestions")
     }
 
@@ -141,6 +159,53 @@ struct SuggestionsTabView: View {
                 : "All suggestions reviewed")
         }
         .background(Color(.systemGroupedBackground))
+    }
+}
+
+// MARK: - Active Repair Row
+
+private struct ActiveRepairRow: View {
+    let activeRepair: ActiveRepair
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(activeRepair.suggestionTitle)
+                        .font(.headline)
+                        .lineLimit(2)
+
+                    Text(activeRepair.suggestionArtist)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Label("\(activeRepair.repairAmount.formatted())", systemImage: "play.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.green)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Label(activeRepair.canonicalSong.title, systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.primary)
+
+                Label(retiredSongsSummary, systemImage: "tray.fill")
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            .font(.caption)
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(AccessibilityIdentifiers.Suggestions.activeRepairRow(id: activeRepair.id))
+    }
+
+    private var retiredSongsSummary: String {
+        let titles = activeRepair.retiredSongs.map(\.title).joined(separator: ", ")
+        return "\(activeRepair.retiredSongs.count) Retired Songs: \(titles)"
     }
 }
 

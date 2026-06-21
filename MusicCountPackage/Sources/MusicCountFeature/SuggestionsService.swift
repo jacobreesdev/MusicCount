@@ -5,18 +5,25 @@ import Foundation
 @Observable
 final class SuggestionsService: Sendable {
     private(set) var allSuggestions: [Suggestion] = []
+    private(set) var activeRepairs: [ActiveRepair] = []
     private var dismissedKeys: Set<String> = []
     private let dismissedKeysKey = StorageKeys.dismissedSuggestions
+    private let activeRepairsKey = StorageKeys.activeRepairs
 
     init() {
         loadDismissedKeys()
+        loadActiveRepairs()
     }
 
     /// Active suggestions sorted by play count difference (largest first).
     var activeSuggestions: [Suggestion] {
         allSuggestions
             .compactMap { suggestion in
-                let groupKey = "\(normalizeTitle(suggestion.sharedTitle))-\(normalizeArtist(suggestion.sharedArtist))"
+                let groupKey = suggestionKey(title: suggestion.sharedTitle, artist: suggestion.sharedArtist)
+
+                if activeRepairs.contains(where: { $0.id == groupKey }) {
+                    return nil
+                }
 
                 // Check if entire group was dismissed
                 if dismissedKeys.contains("\(groupKey)-ENTIRE_GROUP") {
@@ -44,7 +51,7 @@ final class SuggestionsService: Sendable {
         var titleArtistGroups: [String: [SongInfo]] = [:]
 
         for song in songs {
-            let groupKey = "\(normalizeTitle(song.title))-\(normalizeArtist(song.artist))"
+            let groupKey = suggestionKey(title: song.title, artist: song.artist)
             titleArtistGroups[groupKey, default: []].append(song)
         }
 
@@ -69,16 +76,43 @@ final class SuggestionsService: Sendable {
 
     /// Dismisses a single song version from a suggestion group.
     func dismissSong(title: String, artist: String, songId: UInt64) {
-        let key = "\(normalizeTitle(title))-\(normalizeArtist(artist))-\(songId)"
+        let key = "\(suggestionKey(title: title, artist: artist))-\(songId)"
         dismissedKeys.insert(key)
         saveDismissedKeys()
     }
 
     /// Dismisses all versions of a song from suggestions.
     func dismissEntireGroup(title: String, artist: String) {
-        let key = "\(normalizeTitle(title))-\(normalizeArtist(artist))-ENTIRE_GROUP"
+        let key = "\(suggestionKey(title: title, artist: artist))-ENTIRE_GROUP"
         dismissedKeys.insert(key)
         saveDismissedKeys()
+    }
+
+    /// Creates an Active Repair after a Repair Queue has been built.
+    func createActiveRepair(from decision: RepairDecision, for suggestion: Suggestion) throws -> ActiveRepair {
+        let key = suggestionKey(title: suggestion.sharedTitle, artist: suggestion.sharedArtist)
+
+        guard hasActiveRepair(id: key) == false else {
+            throw ActiveRepairError.alreadyExists
+        }
+
+        let activeRepair = ActiveRepair(
+            id: key,
+            suggestionTitle: suggestion.sharedTitle,
+            suggestionArtist: suggestion.sharedArtist,
+            canonicalSong: decision.canonicalSong,
+            retiredSongs: decision.retiredSongs,
+            repairAmount: decision.repairAmount
+        )
+        activeRepairs.append(activeRepair)
+        saveActiveRepairs()
+        return activeRepair
+    }
+
+    /// Returns whether the Suggestion already has an Active Repair.
+    func hasActiveRepair(for suggestion: Suggestion) -> Bool {
+        let key = suggestionKey(title: suggestion.sharedTitle, artist: suggestion.sharedArtist)
+        return hasActiveRepair(id: key)
     }
 
     /// Clears all dismissals, restoring suggestions to the active list.
@@ -95,6 +129,14 @@ final class SuggestionsService: Sendable {
         artist.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private func suggestionKey(title: String, artist: String) -> String {
+        "\(normalizeTitle(title))-\(normalizeArtist(artist))"
+    }
+
+    private func hasActiveRepair(id: String) -> Bool {
+        activeRepairs.contains { $0.id == id }
+    }
+
     private func loadDismissedKeys() {
         if let data = UserDefaults.standard.array(forKey: dismissedKeysKey) as? [String] {
             dismissedKeys = Set(data)
@@ -103,5 +145,25 @@ final class SuggestionsService: Sendable {
 
     private func saveDismissedKeys() {
         UserDefaults.standard.set(Array(dismissedKeys), forKey: dismissedKeysKey)
+    }
+
+    private func loadActiveRepairs() {
+        guard let data = UserDefaults.standard.data(forKey: activeRepairsKey) else { return }
+
+        do {
+            activeRepairs = try JSONDecoder().decode([ActiveRepair].self, from: data)
+        } catch {
+            activeRepairs = []
+            UserDefaults.standard.removeObject(forKey: activeRepairsKey)
+        }
+    }
+
+    private func saveActiveRepairs() {
+        do {
+            let data = try JSONEncoder().encode(activeRepairs)
+            UserDefaults.standard.set(data, forKey: activeRepairsKey)
+        } catch {
+            UserDefaults.standard.removeObject(forKey: activeRepairsKey)
+        }
     }
 }

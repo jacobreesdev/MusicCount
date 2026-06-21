@@ -5,10 +5,12 @@ struct SuggestionRepairView: View {
     let onDismiss: () -> Void
 
     @Environment(AppleMusicQueueService.self) private var queueService
+    @Environment(SuggestionsService.self) private var suggestionsService
     @State private var model: SuggestionRepairModel
     @State private var showingSuccessAlert = false
     @State private var showingErrorAlert = false
     @State private var errorMessage = ""
+    @State private var isBuildingRepairQueue = false
 
     init(suggestion: Suggestion, onDismiss: @escaping () -> Void) {
         self.suggestion = suggestion
@@ -150,7 +152,7 @@ struct SuggestionRepairView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
-            .disabled(model.canBuildRepairQueue == false)
+            .disabled(model.canBuildRepairQueue == false || isBuildingRepairQueue)
             .accessibilityIdentifier(AccessibilityIdentifiers.SuggestionRepair.buildRepairQueueButton)
         }
         .padding()
@@ -180,17 +182,32 @@ struct SuggestionRepairView: View {
     }
 
     private func buildRepairQueue() {
+        guard isBuildingRepairQueue == false else { return }
+
         guard model.canBuildRepairQueue else {
             errorMessage = "A Repair Queue needs at least one play."
             showingErrorAlert = true
             return
         }
 
+        guard suggestionsService.hasActiveRepair(for: suggestion) == false else {
+            errorMessage = errorMessage(for: ActiveRepairError.alreadyExists)
+            showingErrorAlert = true
+            return
+        }
+
+        isBuildingRepairQueue = true
+        defer { isBuildingRepairQueue = false }
+
         do {
             try queueService.addToQueue(song: model.canonicalSong, count: model.repairAmount)
+            _ = try suggestionsService.createActiveRepair(from: model.decision, for: suggestion)
             showingSuccessAlert = true
         } catch let error as AppleMusicQueueService.QueueError {
             errorMessage = error.localizedDescription
+            showingErrorAlert = true
+        } catch let error as ActiveRepairError {
+            errorMessage = errorMessage(for: error)
             showingErrorAlert = true
         } catch {
             errorMessage = "An unexpected error occurred. Please try again."
@@ -217,6 +234,8 @@ struct SuggestionRepairView: View {
             return "At least one Retired Song is required."
         case RepairDecisionError.canonicalSongCannotBeExcluded:
             return "The Canonical Song cannot be retired or excluded."
+        case ActiveRepairError.alreadyExists:
+            return "This Suggestion already has an Active Repair."
         default:
             return "The repair decision could not be updated."
         }
