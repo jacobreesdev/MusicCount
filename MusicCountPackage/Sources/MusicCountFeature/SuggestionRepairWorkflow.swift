@@ -41,6 +41,29 @@ struct ActiveRepairCompletionWorkflowResult: Equatable, Sendable {
 }
 
 @MainActor
+struct ActiveRepairPlaylistSyncWorkflow {
+    private let suggestionsService: any ActiveRepairManaging
+    private let songsToRemovePlaylistService: any SongsToRemovePlaylistSyncing
+
+    init(
+        suggestionsService: any ActiveRepairManaging,
+        songsToRemovePlaylistService: any SongsToRemovePlaylistSyncing
+    ) {
+        self.suggestionsService = suggestionsService
+        self.songsToRemovePlaylistService = songsToRemovePlaylistService
+    }
+
+    func resyncSongsToRemovePlaylist() async -> SongsToRemovePlaylistSyncResult {
+        do {
+            try await songsToRemovePlaylistService.sync(activeRepairs: suggestionsService.activeRepairs)
+            return .synced
+        } catch {
+            return .failed(message: error.localizedDescription)
+        }
+    }
+}
+
+@MainActor
 struct SuggestionRepairWorkflow {
     private let queueService: any RepairQueueAdding
     private let suggestionsService: any ActiveRepairManaging
@@ -63,15 +86,12 @@ struct SuggestionRepairWorkflow {
         try queueService.addToQueue(song: decision.canonicalSong, count: decision.repairAmount)
         let activeRepair = try suggestionsService.createActiveRepair(from: decision, for: suggestion)
 
-        do {
-            try await songsToRemovePlaylistService.sync(activeRepairs: suggestionsService.activeRepairs)
-            return SuggestionRepairWorkflowResult(activeRepair: activeRepair, playlistSync: .synced)
-        } catch {
-            return SuggestionRepairWorkflowResult(
-                activeRepair: activeRepair,
-                playlistSync: .failed(message: error.localizedDescription)
-            )
-        }
+        let playlistSync = await ActiveRepairPlaylistSyncWorkflow(
+            suggestionsService: suggestionsService,
+            songsToRemovePlaylistService: songsToRemovePlaylistService
+        ).resyncSongsToRemovePlaylist()
+
+        return SuggestionRepairWorkflowResult(activeRepair: activeRepair, playlistSync: playlistSync)
     }
 }
 
@@ -91,14 +111,11 @@ struct ActiveRepairCompletionWorkflow {
     func markActiveRepairDone(id: String) async throws -> ActiveRepairCompletionWorkflowResult {
         let completedRepair = try suggestionsService.markActiveRepairDone(id: id)
 
-        do {
-            try await songsToRemovePlaylistService.sync(activeRepairs: suggestionsService.activeRepairs)
-            return ActiveRepairCompletionWorkflowResult(completedRepair: completedRepair, playlistSync: .synced)
-        } catch {
-            return ActiveRepairCompletionWorkflowResult(
-                completedRepair: completedRepair,
-                playlistSync: .failed(message: error.localizedDescription)
-            )
-        }
+        let playlistSync = await ActiveRepairPlaylistSyncWorkflow(
+            suggestionsService: suggestionsService,
+            songsToRemovePlaylistService: songsToRemovePlaylistService
+        ).resyncSongsToRemovePlaylist()
+
+        return ActiveRepairCompletionWorkflowResult(completedRepair: completedRepair, playlistSync: playlistSync)
     }
 }

@@ -95,6 +95,42 @@ struct SuggestionRepairWorkflowTests {
         #expect(result.playlistSync == .failed(message: "Playlist sync unavailable."))
     }
 
+    @Test("Retrying Songs to Remove Playlist sync uses outstanding Active Repairs", .bug(id: 20))
+    func retryingPlaylistSyncUsesOutstandingActiveRepairs() async {
+        let firstRepair = makeActiveRepair(id: "midnight-city-m83", title: "Midnight City", retiredSongID: 2)
+        let secondRepair = makeActiveRepair(id: "sweet-disposition-the-temper-trap", title: "Sweet Disposition", retiredSongID: 4)
+        let suggestionsService = FakeActiveRepairStore(activeRepairs: [firstRepair, secondRepair])
+        let playlistService = FakePlaylistSyncService()
+        let workflow = ActiveRepairPlaylistSyncWorkflow(
+            suggestionsService: suggestionsService,
+            songsToRemovePlaylistService: playlistService
+        )
+
+        let result = await workflow.resyncSongsToRemovePlaylist()
+
+        #expect(result == .synced)
+        #expect(playlistService.syncedActiveRepairIDs == [[firstRepair.id, secondRepair.id]])
+        #expect(suggestionsService.activeRepairs == [firstRepair, secondRepair])
+        #expect(suggestionsService.completedRepairs.isEmpty)
+    }
+
+    @Test("Retrying Songs to Remove Playlist sync reports failure without changing Active Repairs", .bug(id: 20))
+    func retryingPlaylistSyncReportsFailureWithoutChangingActiveRepairs() async {
+        let activeRepair = makeActiveRepair(id: "midnight-city-m83", title: "Midnight City", retiredSongID: 2)
+        let suggestionsService = FakeActiveRepairStore(activeRepairs: [activeRepair])
+        let playlistService = FakePlaylistSyncService(error: TestPlaylistSyncError.unavailable)
+        let workflow = ActiveRepairPlaylistSyncWorkflow(
+            suggestionsService: suggestionsService,
+            songsToRemovePlaylistService: playlistService
+        )
+
+        let result = await workflow.resyncSongsToRemovePlaylist()
+
+        #expect(result == .failed(message: "Playlist sync unavailable."))
+        #expect(playlistService.syncedActiveRepairIDs == [[activeRepair.id]])
+        #expect(suggestionsService.activeRepairs == [activeRepair])
+    }
+
     private func makeSuggestion() -> Suggestion {
         Suggestion(
             sharedTitle: "Midnight City",
