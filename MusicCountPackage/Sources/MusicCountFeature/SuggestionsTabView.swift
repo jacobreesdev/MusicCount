@@ -30,8 +30,12 @@ struct SuggestionsTabView: View {
         return sortOption.sorted(filtered)
     }
 
-    private var hasVisibleRepairWork: Bool {
-        suggestionsService.activeRepairs.isEmpty == false || filteredAndSortedSuggestions.isEmpty == false
+    private var hasRepairWork: Bool {
+        suggestionsService.activeRepairs.isEmpty == false || suggestionsService.activeSuggestions.isEmpty == false
+    }
+
+    private var isShowingSearchEmptyState: Bool {
+        searchText.isEmpty == false && hasRepairWork
     }
 
     var body: some View {
@@ -61,7 +65,7 @@ struct SuggestionsTabView: View {
 
     private var contentView: some View {
         Group {
-            if hasVisibleRepairWork == false {
+            if hasRepairWork == false {
                 emptyStateView
                     .toolbar(.hidden, for: .navigationBar)
             } else {
@@ -169,19 +173,32 @@ struct SuggestionsTabView: View {
         .background(Color(.systemGroupedBackground))
         .contentMargins(.top, 0, for: .scrollContent)
         .accessibilityIdentifier(AccessibilityIdentifiers.Suggestions.suggestionsList)
+        .overlay {
+            if suggestionsService.activeRepairs.isEmpty && filteredAndSortedSuggestions.isEmpty {
+                emptyStateView
+            }
+        }
         .searchable(text: $searchText, placement: .automatic, prompt: "Search suggestions")
     }
 
     private var emptyStateView: some View {
         ContentUnavailableView {
-            Text("No Suggestions")
+            Text(isShowingSearchEmptyState ? "No Matching Suggestions" : "No Suggestions")
                 .font(.title2.weight(.semibold))
         } description: {
-            Text(suggestionsService.allSuggestions.isEmpty
-                ? "No duplicate songs found"
-                : "All suggestions reviewed")
+            Text(emptyStateDescription)
         }
         .background(Color(.systemGroupedBackground))
+    }
+
+    private var emptyStateDescription: String {
+        if isShowingSearchEmptyState {
+            return "No suggestions match '\(searchText)'"
+        }
+
+        return suggestionsService.allSuggestions.isEmpty
+            ? "No duplicate songs found"
+            : "All suggestions reviewed"
     }
 
     private func markActiveRepairDone(_ activeRepair: ActiveRepair) async {
