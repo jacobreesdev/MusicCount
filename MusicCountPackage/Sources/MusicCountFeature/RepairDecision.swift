@@ -7,6 +7,14 @@ struct RepairDecision: Equatable, Sendable {
     let retiredSongs: [SongInfo]
     let excludedSongs: [SongInfo]
 
+    var repairAmount: Int {
+        retiredSongs.reduce(0) { $0 + $1.playCount }
+    }
+
+    var requiresRepairQueue: Bool {
+        repairAmount > 0
+    }
+
     init(
         duplicateGroup: [SongInfo],
         canonicalSongID: UInt64?,
