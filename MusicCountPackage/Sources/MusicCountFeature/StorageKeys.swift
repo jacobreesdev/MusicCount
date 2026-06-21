@@ -5,4 +5,5 @@ enum StorageKeys {
     static let queueBehavior = "queueBehavior"
     static let dismissedSuggestions = "com.musiccount.dismissedSuggestions"
     static let activeRepairs = "com.musiccount.activeRepairs"
+    static let songsToRemovePlaylistID = "com.musiccount.songsToRemovePlaylistID"
 }

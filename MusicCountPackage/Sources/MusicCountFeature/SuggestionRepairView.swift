@@ -6,6 +6,7 @@ struct SuggestionRepairView: View {
 
     @Environment(AppleMusicQueueService.self) private var queueService
     @Environment(SuggestionsService.self) private var suggestionsService
+    @Environment(SongsToRemovePlaylistService.self) private var songsToRemovePlaylistService
     @State private var model: SuggestionRepairModel
     @State private var showingSuccessAlert = false
     @State private var showingErrorAlert = false
@@ -144,7 +145,9 @@ struct SuggestionRepairView: View {
             .font(.subheadline)
 
             Button {
-                buildRepairQueue()
+                Task {
+                    await buildRepairQueue()
+                }
             } label: {
                 Label("Build Repair Queue", systemImage: "music.note.list")
                     .font(.headline)
@@ -181,7 +184,7 @@ struct SuggestionRepairView: View {
         }
     }
 
-    private func buildRepairQueue() {
+    private func buildRepairQueue() async {
         guard isBuildingRepairQueue == false else { return }
 
         guard model.canBuildRepairQueue else {
@@ -202,12 +205,16 @@ struct SuggestionRepairView: View {
         do {
             try queueService.addToQueue(song: model.canonicalSong, count: model.repairAmount)
             _ = try suggestionsService.createActiveRepair(from: model.decision, for: suggestion)
+            try await songsToRemovePlaylistService.sync(activeRepairs: suggestionsService.activeRepairs)
             showingSuccessAlert = true
         } catch let error as AppleMusicQueueService.QueueError {
             errorMessage = error.localizedDescription
             showingErrorAlert = true
         } catch let error as ActiveRepairError {
             errorMessage = errorMessage(for: error)
+            showingErrorAlert = true
+        } catch let error as SongsToRemovePlaylistError {
+            errorMessage = error.localizedDescription
             showingErrorAlert = true
         } catch {
             errorMessage = "An unexpected error occurred. Please try again."
