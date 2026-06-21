@@ -24,6 +24,58 @@ protocol SongsToRemovePlaylistStore: AnyObject {
     var playlistID: String? { get set }
 }
 
+@MainActor
+protocol SongsToRemoveMediaLibrary {
+    func playbackStoreIDs(for songIDs: Set<UInt64>) -> [UInt64: String]
+}
+
+@MainActor
+struct MPMediaSongsToRemoveMediaLibrary: SongsToRemoveMediaLibrary {
+    func playbackStoreIDs(for songIDs: Set<UInt64>) -> [UInt64: String] {
+        let query = MPMediaQuery.songs()
+        return Dictionary(
+            uniqueKeysWithValues: (query.items ?? []).compactMap { item -> (UInt64, String)? in
+                let persistentID = item.persistentID
+                guard songIDs.contains(persistentID) else { return nil }
+
+                let playbackStoreID = item.playbackStoreID
+                guard playbackStoreID.isEmpty == false, playbackStoreID != "0" else { return nil }
+
+                return (persistentID, playbackStoreID)
+            }
+        )
+    }
+}
+
+@MainActor
+struct SongsToRemoveMusicItemIDResolver {
+    private let mediaLibrary: any SongsToRemoveMediaLibrary
+
+    init(mediaLibrary: any SongsToRemoveMediaLibrary = MPMediaSongsToRemoveMediaLibrary()) {
+        self.mediaLibrary = mediaLibrary
+    }
+
+    func musicItemIDs(for songIDs: [UInt64]) throws -> [MusicItemID] {
+        guard songIDs.isEmpty == false else { return [] }
+
+        let playbackStoreIDsByPersistentID = mediaLibrary
+            .playbackStoreIDs(for: Set(songIDs))
+            .filter { Self.isValidPlaybackStoreID($0.value) }
+        let missingSongIDs = songIDs.filter { playbackStoreIDsByPersistentID[$0] == nil }
+        guard missingSongIDs.isEmpty else {
+            throw SongsToRemovePlaylistError.missingLibrarySongs(missingSongIDs)
+        }
+
+        return songIDs.compactMap { songID in
+            playbackStoreIDsByPersistentID[songID].map { MusicItemID($0) }
+        }
+    }
+
+    private static func isValidPlaybackStoreID(_ playbackStoreID: String) -> Bool {
+        playbackStoreID.isEmpty == false && playbackStoreID != "0"
+    }
+}
+
 final class UserDefaultsSongsToRemovePlaylistStore: SongsToRemovePlaylistStore {
     private let userDefaults: UserDefaults
     private let key: String
@@ -123,6 +175,12 @@ final class SongsToRemovePlaylistService {
 
 @MainActor
 struct MusicKitSongsToRemovePlaylistClient: SongsToRemovePlaylistClient {
+    private let itemIDResolver: SongsToRemoveMusicItemIDResolver
+
+    init(itemIDResolver: SongsToRemoveMusicItemIDResolver = SongsToRemoveMusicItemIDResolver()) {
+        self.itemIDResolver = itemIDResolver
+    }
+
     func playlist(id: String) async throws -> SongsToRemovePlaylist? {
         var request = MusicLibraryRequest<Playlist>()
         request.limit = 1
@@ -183,7 +241,7 @@ struct MusicKitSongsToRemovePlaylistClient: SongsToRemovePlaylistClient {
     }
 
     private func musicKitSongs(for songIDs: [UInt64]) async throws -> [Song] {
-        let itemIDs = try musicItemIDs(for: songIDs)
+        let itemIDs = try itemIDResolver.musicItemIDs(for: songIDs)
         guard itemIDs.isEmpty == false else { return [] }
 
         var request = MusicLibraryRequest<Song>()
@@ -203,32 +261,5 @@ struct MusicKitSongsToRemovePlaylistClient: SongsToRemovePlaylistClient {
         }
 
         return orderedSongs
-    }
-
-    private func musicItemIDs(for songIDs: [UInt64]) throws -> [MusicItemID] {
-        guard songIDs.isEmpty == false else { return [] }
-
-        let requestedSongIDs = Set(songIDs)
-        let query = MPMediaQuery.songs()
-        let playbackStoreIDsByPersistentID = Dictionary(
-            uniqueKeysWithValues: (query.items ?? []).compactMap { item -> (UInt64, String)? in
-                let persistentID = item.persistentID
-                guard requestedSongIDs.contains(persistentID) else { return nil }
-
-                let playbackStoreID = item.playbackStoreID
-                guard playbackStoreID.isEmpty == false else { return nil }
-
-                return (persistentID, playbackStoreID)
-            }
-        )
-
-        let missingSongIDs = songIDs.filter { playbackStoreIDsByPersistentID[$0] == nil }
-        guard missingSongIDs.isEmpty else {
-            throw SongsToRemovePlaylistError.missingLibrarySongs(missingSongIDs)
-        }
-
-        return songIDs.compactMap { songID in
-            playbackStoreIDsByPersistentID[songID].map { MusicItemID($0) }
-        }
     }
 }

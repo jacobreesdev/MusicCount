@@ -106,6 +106,42 @@ struct SongsToRemovePlaylistServiceTests {
         #expect(store.playlistID == "owned-playlist")
     }
 
+    @Test("Music item ID resolver keeps Retired Song order", .bug(id: 7))
+    func musicItemIDResolverKeepsRetiredSongOrder() throws {
+        let resolver = SongsToRemoveMusicItemIDResolver(
+            mediaLibrary: FakeSongsToRemoveMediaLibrary(
+                playbackStoreIDsByPersistentID: [
+                    2: "store-2",
+                    3: "store-3",
+                ]
+            )
+        )
+
+        let itemIDs = try resolver.musicItemIDs(for: [3, 2])
+
+        #expect(itemIDs.map(\.rawValue) == ["store-3", "store-2"])
+    }
+
+    @Test("Music item ID resolver rejects local-only Retired Songs", .bug(id: 7))
+    func musicItemIDResolverRejectsPlaybackStoreIDZero() throws {
+        let resolver = SongsToRemoveMusicItemIDResolver(
+            mediaLibrary: FakeSongsToRemoveMediaLibrary(
+                playbackStoreIDsByPersistentID: [
+                    2: "0",
+                ]
+            )
+        )
+
+        do {
+            _ = try resolver.musicItemIDs(for: [2])
+            Issue.record("Expected local-only Retired Song to be reported as missing.")
+        } catch let error as SongsToRemovePlaylistError {
+            #expect(error == .missingLibrarySongs([2]))
+        } catch {
+            Issue.record("Wrong error thrown: \(error)")
+        }
+    }
+
     private func makeSong(id: UInt64, title: String, playCount: Int) -> SongInfo {
         SongInfo(
             id: id,
@@ -183,5 +219,14 @@ private final class FakeSongsToRemovePlaylistStore: SongsToRemovePlaylistStore {
 
     init(playlistID: String? = nil) {
         self.playlistID = playlistID
+    }
+}
+
+@MainActor
+private struct FakeSongsToRemoveMediaLibrary: SongsToRemoveMediaLibrary {
+    let playbackStoreIDsByPersistentID: [UInt64: String]
+
+    func playbackStoreIDs(for songIDs: Set<UInt64>) -> [UInt64: String] {
+        playbackStoreIDsByPersistentID.filter { songIDs.contains($0.key) }
     }
 }

@@ -10,6 +10,7 @@ struct SuggestionRepairView: View {
     @State private var model: SuggestionRepairModel
     @State private var showingSuccessAlert = false
     @State private var showingErrorAlert = false
+    @State private var successMessage = ""
     @State private var errorMessage = ""
     @State private var isBuildingRepairQueue = false
 
@@ -49,7 +50,7 @@ struct SuggestionRepairView: View {
                 onDismiss()
             }
         } message: {
-            Text("\(model.repairAmount.formatted()) plays for \(model.canonicalSong.title) have been added to your Apple Music queue.")
+            Text(successMessage)
         }
         .alert("Unable to Build Repair Queue", isPresented: $showingErrorAlert) {
             Button("OK", role: .cancel) { }
@@ -203,18 +204,19 @@ struct SuggestionRepairView: View {
         defer { isBuildingRepairQueue = false }
 
         do {
-            try queueService.addToQueue(song: model.canonicalSong, count: model.repairAmount)
-            _ = try suggestionsService.createActiveRepair(from: model.decision, for: suggestion)
-            try await songsToRemovePlaylistService.sync(activeRepairs: suggestionsService.activeRepairs)
+            let workflow = SuggestionRepairWorkflow(
+                queueService: queueService,
+                suggestionsService: suggestionsService,
+                songsToRemovePlaylistService: songsToRemovePlaylistService
+            )
+            let result = try await workflow.buildRepairQueue(decision: model.decision, for: suggestion)
+            successMessage = successMessage(for: result)
             showingSuccessAlert = true
         } catch let error as AppleMusicQueueService.QueueError {
             errorMessage = error.localizedDescription
             showingErrorAlert = true
         } catch let error as ActiveRepairError {
             errorMessage = errorMessage(for: error)
-            showingErrorAlert = true
-        } catch let error as SongsToRemovePlaylistError {
-            errorMessage = error.localizedDescription
             showingErrorAlert = true
         } catch {
             errorMessage = "An unexpected error occurred. Please try again."
@@ -233,6 +235,21 @@ struct SuggestionRepairView: View {
             "\(song.playCount.formatted()) plays",
             model.role(for: song).accessibilityLabel,
         ].joined(separator: ", ")
+    }
+
+    private func successMessage(for result: SuggestionRepairWorkflowResult) -> String {
+        let baseMessage = "\(model.repairAmount.formatted()) plays for \(model.canonicalSong.title) have been added to your Apple Music queue."
+
+        switch result.playlistSync {
+        case .synced:
+            return baseMessage
+        case .failed:
+            return """
+            \(baseMessage)
+
+            The Active Repair was saved, but MusicCount could not update the Songs to Remove Playlist. You can retry playlist sync later.
+            """
+        }
     }
 
     private func errorMessage(for error: Error) -> String {
