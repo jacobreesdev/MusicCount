@@ -6,13 +6,19 @@ import Foundation
 final class SuggestionsService: Sendable {
     private(set) var allSuggestions: [Suggestion] = []
     private(set) var activeRepairs: [ActiveRepair] = []
+    private(set) var completedRepairs: [CompletedRepair] = []
     private var dismissedKeys: Set<String> = []
     private let dismissedKeysKey = StorageKeys.dismissedSuggestions
     private let activeRepairsKey = StorageKeys.activeRepairs
+    private let completedRepairsKey = StorageKeys.completedRepairs
 
     init() {
+        #if DEBUG
+        MockRepairStateSeeder.seedActiveRepairsIfRequested()
+        #endif
         loadDismissedKeys()
         loadActiveRepairs()
+        loadCompletedRepairs()
     }
 
     /// Active suggestions sorted by play count difference (largest first).
@@ -21,7 +27,7 @@ final class SuggestionsService: Sendable {
             .compactMap { suggestion in
                 let groupKey = suggestionKey(title: suggestion.sharedTitle, artist: suggestion.sharedArtist)
 
-                if activeRepairs.contains(where: { $0.id == groupKey }) {
+                if hasRepairRecord(id: groupKey) {
                     return nil
                 }
 
@@ -92,7 +98,7 @@ final class SuggestionsService: Sendable {
     func createActiveRepair(from decision: RepairDecision, for suggestion: Suggestion) throws -> ActiveRepair {
         let key = suggestionKey(title: suggestion.sharedTitle, artist: suggestion.sharedArtist)
 
-        guard hasActiveRepair(id: key) == false else {
+        guard hasRepairRecord(id: key) == false else {
             throw ActiveRepairError.alreadyExists
         }
 
@@ -115,6 +121,24 @@ final class SuggestionsService: Sendable {
         return hasActiveRepair(id: key)
     }
 
+    /// Marks an Active Repair as done after the user completes follow-through outside MusicCount.
+    func markActiveRepairDone(id: String) throws -> CompletedRepair {
+        guard let activeRepairIndex = activeRepairs.firstIndex(where: { $0.id == id }) else {
+            throw ActiveRepairError.notFound
+        }
+
+        let activeRepair = activeRepairs.remove(at: activeRepairIndex)
+        let completedRepair = CompletedRepair(activeRepair: activeRepair)
+
+        if completedRepairs.contains(where: { $0.id == completedRepair.id }) == false {
+            completedRepairs.append(completedRepair)
+        }
+
+        saveActiveRepairs()
+        saveCompletedRepairs()
+        return completedRepair
+    }
+
     /// Clears all dismissals, restoring suggestions to the active list.
     func resetDismissals() {
         dismissedKeys.removeAll()
@@ -135,6 +159,10 @@ final class SuggestionsService: Sendable {
 
     private func hasActiveRepair(id: String) -> Bool {
         activeRepairs.contains { $0.id == id }
+    }
+
+    private func hasRepairRecord(id: String) -> Bool {
+        hasActiveRepair(id: id) || completedRepairs.contains { $0.id == id }
     }
 
     private func loadDismissedKeys() {
@@ -164,6 +192,26 @@ final class SuggestionsService: Sendable {
             UserDefaults.standard.set(data, forKey: activeRepairsKey)
         } catch {
             UserDefaults.standard.removeObject(forKey: activeRepairsKey)
+        }
+    }
+
+    private func loadCompletedRepairs() {
+        guard let data = UserDefaults.standard.data(forKey: completedRepairsKey) else { return }
+
+        do {
+            completedRepairs = try JSONDecoder().decode([CompletedRepair].self, from: data)
+        } catch {
+            completedRepairs = []
+            UserDefaults.standard.removeObject(forKey: completedRepairsKey)
+        }
+    }
+
+    private func saveCompletedRepairs() {
+        do {
+            let data = try JSONEncoder().encode(completedRepairs)
+            UserDefaults.standard.set(data, forKey: completedRepairsKey)
+        } catch {
+            UserDefaults.standard.removeObject(forKey: completedRepairsKey)
         }
     }
 }

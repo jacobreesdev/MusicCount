@@ -26,6 +26,35 @@ struct ActiveRepair: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
-enum ActiveRepairError: Error, Equatable, Sendable {
+/// A repair the user has marked done after follow-through outside MusicCount.
+struct CompletedRepair: Codable, Equatable, Identifiable, Sendable {
+    let id: String
+    let suggestionTitle: String
+    let suggestionArtist: String
+    let canonicalSong: SongInfo
+    let retiredSongs: [SongInfo]
+    let repairAmount: Int
+
+    init(activeRepair: ActiveRepair) {
+        id = activeRepair.id
+        suggestionTitle = activeRepair.suggestionTitle
+        suggestionArtist = activeRepair.suggestionArtist
+        canonicalSong = activeRepair.canonicalSong
+        retiredSongs = activeRepair.retiredSongs
+        repairAmount = activeRepair.repairAmount
+    }
+}
+
+enum ActiveRepairError: Error, Equatable, LocalizedError, Sendable {
     case alreadyExists
+    case notFound
+
+    var errorDescription: String? {
+        switch self {
+        case .alreadyExists:
+            return "This Suggestion already has an Active Repair."
+        case .notFound:
+            return "MusicCount could not find this Active Repair."
+        }
+    }
 }

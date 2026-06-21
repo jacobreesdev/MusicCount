@@ -17,7 +17,7 @@ final class MusicLibraryVerificationUITests: XCTestCase {
     @MainActor
     func testMockDataLaunchShowsLibraryAndSuggestions() throws {
         let app = XCUIApplication()
-        app.launchArguments.append("-MockData")
+        app.launchArguments.append(contentsOf: ["-MockData", "-ResetRepairState"])
         app.launch()
 
         XCTAssertFalse(app.staticTexts["Access Denied"].exists)
@@ -28,5 +28,33 @@ final class MusicLibraryVerificationUITests: XCTestCase {
 
         XCTAssertTrue(app.searchFields["Search suggestions"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Blinding Lights"].waitForExistence(timeout: 10))
+    }
+
+    @MainActor
+    func testMockActiveRepairCanBeMarkedDone() throws {
+        let app = XCUIApplication()
+        app.launchArguments.append(contentsOf: ["-MockData", "-MockActiveRepairs"])
+        app.launch()
+
+        app.tabBars.buttons["Suggestions"].tap()
+        XCTAssertTrue(app.searchFields["Search suggestions"].waitForExistence(timeout: 10))
+
+        let completedRepairDoneButton = app.buttons["suggestions.activeRepair.done.blinding lights-the weeknd"]
+        XCTAssertTrue(completedRepairDoneButton.waitForExistence(timeout: 10))
+
+        completedRepairDoneButton.tap()
+
+        let completionAlert = app.alerts["Repair Marked Done"]
+        XCTAssertTrue(completionAlert.waitForExistence(timeout: 10))
+
+        let playlistWarning = completionAlert.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS %@", "could not update the Songs to Remove Playlist")
+        ).firstMatch
+        XCTAssertTrue(playlistWarning.exists)
+
+        completionAlert.buttons["OK"].tap()
+
+        XCTAssertFalse(completedRepairDoneButton.waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons["suggestions.activeRepair.done.shake it off-taylor swift"].waitForExistence(timeout: 5))
     }
 }

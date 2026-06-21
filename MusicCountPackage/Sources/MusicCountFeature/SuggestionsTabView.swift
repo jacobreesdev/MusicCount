@@ -3,9 +3,15 @@ import SwiftUI
 @MainActor
 struct SuggestionsTabView: View {
     @Environment(SuggestionsService.self) private var suggestionsService
+    @Environment(SongsToRemovePlaylistService.self) private var songsToRemovePlaylistService
     @State private var selectedSuggestion: Suggestion?
     @State private var sortOption: SuggestionSortOption = .playCountDifference
     @State private var searchText = ""
+    @State private var completingRepairIDs: Set<String> = []
+    @State private var completionMessage = ""
+    @State private var completionErrorMessage = ""
+    @State private var showingCompletionAlert = false
+    @State private var showingCompletionErrorAlert = false
     @Binding var selectedTab: Int
 
     private var filteredAndSortedSuggestions: [Suggestion] {
@@ -41,6 +47,16 @@ struct SuggestionsTabView: View {
             }
             .presentationDetents([.medium, .large])
         }
+        .alert("Repair Marked Done", isPresented: $showingCompletionAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(completionMessage)
+        }
+        .alert("Unable to Mark Repair Done", isPresented: $showingCompletionErrorAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(completionErrorMessage)
+        }
     }
 
     private var contentView: some View {
@@ -74,7 +90,14 @@ struct SuggestionsTabView: View {
             if suggestionsService.activeRepairs.isEmpty == false {
                 Section {
                     ForEach(suggestionsService.activeRepairs) { activeRepair in
-                        ActiveRepairRow(activeRepair: activeRepair)
+                        ActiveRepairRow(
+                            activeRepair: activeRepair,
+                            isCompleting: completingRepairIDs.contains(activeRepair.id)
+                        ) {
+                            Task {
+                                await markActiveRepairDone(activeRepair)
+                            }
+                        }
                     }
                 } header: {
                     Text("Active Repairs")
@@ -160,47 +183,97 @@ struct SuggestionsTabView: View {
         }
         .background(Color(.systemGroupedBackground))
     }
+
+    private func markActiveRepairDone(_ activeRepair: ActiveRepair) async {
+        guard completingRepairIDs.contains(activeRepair.id) == false else { return }
+
+        completingRepairIDs.insert(activeRepair.id)
+        defer {
+            completingRepairIDs.remove(activeRepair.id)
+        }
+
+        do {
+            let workflow = ActiveRepairCompletionWorkflow(
+                suggestionsService: suggestionsService,
+                songsToRemovePlaylistService: songsToRemovePlaylistService
+            )
+            let result = try await workflow.markActiveRepairDone(id: activeRepair.id)
+            completionMessage = completionMessage(for: result)
+            showingCompletionAlert = true
+        } catch {
+            completionErrorMessage = error.localizedDescription
+            showingCompletionErrorAlert = true
+        }
+    }
+
+    private func completionMessage(for result: ActiveRepairCompletionWorkflowResult) -> String {
+        let baseMessage = "\(result.completedRepair.suggestionTitle) was marked done. MusicCount will keep this Suggestion out of normal review."
+
+        switch result.playlistSync {
+        case .synced:
+            return "\(baseMessage) Its Retired Songs were removed from the Songs to Remove Playlist."
+        case .failed:
+            return """
+            \(baseMessage)
+
+            The Active Repair was marked done, but MusicCount could not update the Songs to Remove Playlist. You can retry playlist sync later.
+            """
+        }
+    }
 }
 
 // MARK: - Active Repair Row
 
 private struct ActiveRepairRow: View {
     let activeRepair: ActiveRepair
+    let isCompleting: Bool
+    let onMarkDone: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(activeRepair.suggestionTitle)
-                        .font(.headline)
-                        .lineLimit(2)
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(activeRepair.suggestionTitle)
+                            .font(.headline)
+                            .lineLimit(2)
 
-                    Text(activeRepair.suggestionArtist)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        Text(activeRepair.suggestionArtist)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    Label("\(activeRepair.repairAmount.formatted())", systemImage: "play.circle.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.green)
                 }
 
-                Spacer()
+                VStack(alignment: .leading, spacing: 6) {
+                    Label(activeRepair.canonicalSong.title, systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.primary)
 
-                Label("\(activeRepair.repairAmount.formatted())", systemImage: "play.circle.fill")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.green)
+                    Label(retiredSongsSummary, systemImage: "tray.fill")
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                .font(.caption)
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Label(activeRepair.canonicalSong.title, systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.primary)
-
-                Label(retiredSongsSummary, systemImage: "tray.fill")
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+            Button {
+                onMarkDone()
+            } label: {
+                Label(isCompleting ? "Marking" : "Done", systemImage: isCompleting ? "hourglass" : "checkmark.circle.fill")
             }
-            .font(.caption)
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(isCompleting)
+            .accessibilityIdentifier(AccessibilityIdentifiers.Suggestions.markActiveRepairDoneButton(id: activeRepair.id))
+            .accessibilityHint("Mark this Active Repair as a Completed Repair")
         }
         .padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier(AccessibilityIdentifiers.Suggestions.activeRepairRow(id: activeRepair.id))
     }
 
     private var retiredSongsSummary: String {
