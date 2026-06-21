@@ -220,6 +220,32 @@ struct SuggestionsServiceTests {
         #expect(restoredService.activeSuggestions.isEmpty)
     }
 
+    @Test("Multiple Suggestions can become Active Repairs in one session", .bug(id: 6))
+    func createsRepeatedActiveRepairsInOneSession() throws {
+        let service = makeFreshService()
+        let songs = [
+            makeSong(id: 1, title: "Midnight City", artist: "M83", playCount: 140),
+            makeSong(id: 2, title: "Midnight City", artist: "M83", playCount: 22),
+            makeSong(id: 3, title: "Sweet Disposition", artist: "The Temper Trap", playCount: 98),
+            makeSong(id: 4, title: "Sweet Disposition", artist: "The Temper Trap", playCount: 30),
+        ]
+        service.analyzeSongs(songs)
+        let firstSuggestion = try #require(service.activeSuggestions.first { $0.sharedTitle == "Midnight City" })
+        let firstRepairModel = try SuggestionRepairModel(suggestion: firstSuggestion)
+
+        let firstActiveRepair = try service.createActiveRepair(from: firstRepairModel.decision, for: firstSuggestion)
+
+        #expect(service.activeRepairs == [firstActiveRepair])
+        #expect(service.activeSuggestions.map(\.sharedTitle) == ["Sweet Disposition"])
+
+        let secondSuggestion = try #require(service.activeSuggestions.first)
+        let secondRepairModel = try SuggestionRepairModel(suggestion: secondSuggestion)
+        let secondActiveRepair = try service.createActiveRepair(from: secondRepairModel.decision, for: secondSuggestion)
+
+        #expect(service.activeRepairs == [firstActiveRepair, secondActiveRepair])
+        #expect(service.activeSuggestions.isEmpty)
+    }
+
     // MARK: - Dismissal Tests
 
     @Test("Dismissing entire group removes from active")
