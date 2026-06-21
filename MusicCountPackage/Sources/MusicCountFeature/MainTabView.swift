@@ -5,6 +5,7 @@ public struct MainTabView: View {
     @State private var selectedTab = 0
     @State private var queueService = AppleMusicQueueService()
     @State private var suggestionsService = SuggestionsService()
+    @State private var songsToRemovePlaylistService = SongsToRemovePlaylistService()
 
     public var body: some View {
         TabView(selection: $selectedTab) {
@@ -32,6 +33,7 @@ public struct MainTabView: View {
         }
         .environment(queueService)
         .environment(suggestionsService)
+        .environment(songsToRemovePlaylistService)
         .onAppear {
             let appearance = UITabBarAppearance()
             appearance.configureWithDefaultBackground()
