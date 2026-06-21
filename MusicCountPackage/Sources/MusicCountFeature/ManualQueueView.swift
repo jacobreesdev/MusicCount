@@ -20,11 +20,11 @@ struct ManualQueueView: View {
                             .font(.system(size: 50))
                             .foregroundStyle(.blue.gradient)
 
-                        Text("Add to Queue")
+                        Text("Manual Queue")
                             .font(.title2)
                             .fontWeight(.semibold)
 
-                        Text("Queue this song multiple times to match play counts")
+                        Text("Add manual plays for this Library Song")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
@@ -54,17 +54,18 @@ struct ManualQueueView: View {
                     Button("Cancel") {
                         showingManualQueue = false
                     }
+                    .accessibilityIdentifier(AccessibilityIdentifiers.ManualQueue.cancelButton)
                 }
             }
         }
-        .alert("Added to Apple Music Queue", isPresented: $showingSuccessAlert) {
+        .alert("Manual Plays Added", isPresented: $showingSuccessAlert) {
             Button("OK") {
                 showingManualQueue = false
             }
         } message: {
-            Text("\(numberOfPlays) copies of \(song.title) have been added to your Apple Music queue. Open the Music app to start playback.")
+            Text("\(numberOfPlays) manual plays for \(song.title) have been added to your Apple Music queue. Open the Music app to start playback.")
         }
-        .alert("Error", isPresented: $showingErrorAlert) {
+        .alert("Unable to Add Manual Plays", isPresented: $showingErrorAlert) {
             Button("OK") { }
         } message: {
             Text(errorMessage)
@@ -122,7 +123,7 @@ struct ManualQueueView: View {
 
     private var numberInputSection: some View {
         VStack(spacing: 16) {
-            Text("Number of Plays to Add")
+            Text("Manual Plays")
                 .font(.headline)
 
             HStack(spacing: 16) {
@@ -137,6 +138,7 @@ struct ManualQueueView: View {
                         .foregroundStyle(numberOfPlays > 1 ? .blue : .gray)
                 }
                 .disabled(numberOfPlays <= 1)
+                .accessibilityIdentifier(AccessibilityIdentifiers.ManualQueue.decrementButton)
 
                 // Number display
                 TextField("Number", value: $numberOfPlays, format: .number)
@@ -155,6 +157,7 @@ struct ManualQueueView: View {
                             numberOfPlays = 1000
                         }
                     }
+                    .accessibilityIdentifier(AccessibilityIdentifiers.ManualQueue.playsTextField)
 
                 // Increment button
                 Button {
@@ -167,6 +170,7 @@ struct ManualQueueView: View {
                         .foregroundStyle(numberOfPlays < 1000 ? .blue : .gray)
                 }
                 .disabled(numberOfPlays >= 1000)
+                .accessibilityIdentifier(AccessibilityIdentifiers.ManualQueue.incrementButton)
             }
 
             Text("Enter a number between 1 and 1000")
@@ -198,6 +202,7 @@ struct ManualQueueView: View {
                     }
                     .buttonStyle(.bordered)
                     .tint(numberOfPlays == amount ? .blue : .gray)
+                    .accessibilityIdentifier(AccessibilityIdentifiers.ManualQueue.quickAddButton(amount: amount))
                 }
             }
         }
@@ -209,12 +214,13 @@ struct ManualQueueView: View {
         Button {
             addToQueue()
         } label: {
-            Label("Add to Queue", systemImage: "plus.circle.fill")
+            Label("Add Manual Plays", systemImage: "plus.circle.fill")
                 .font(.headline)
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
+        .accessibilityIdentifier(AccessibilityIdentifiers.ManualQueue.addToQueueButton)
     }
 
     // MARK: - Actions
@@ -232,7 +238,7 @@ struct ManualQueueView: View {
             try queueService.addToQueue(song: song, count: numberOfPlays)
             showingSuccessAlert = true
         } catch {
-            errorMessage = "Failed to add songs to queue. Please try again."
+            errorMessage = "Failed to add manual plays. Please try again."
             showingErrorAlert = true
         }
     }
