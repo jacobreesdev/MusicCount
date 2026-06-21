@@ -55,6 +55,67 @@ struct RepairDecisionTests {
         #expect(decision.excludedSongs == [distinctSong])
     }
 
+    // MARK: - Repair Amount
+
+    @Test("Repair Amount sums included Retired Song play counts")
+    func repairAmountSumsIncludedRetiredSongPlayCounts() throws {
+        let canonicalSong = makeSong(id: 1, playCount: 50)
+        let retiredSong = makeSong(id: 2, playCount: 20)
+
+        let decision = try RepairDecision(
+            duplicateGroup: [canonicalSong, retiredSong],
+            canonicalSongID: canonicalSong.id
+        )
+
+        #expect(decision.repairAmount == 20)
+    }
+
+    @Test("Repair Amount sums multiple Retired Songs")
+    func repairAmountSumsMultipleRetiredSongs() throws {
+        let canonicalSong = makeSong(id: 1, playCount: 100)
+        let firstRetiredSong = makeSong(id: 2, playCount: 30)
+        let secondRetiredSong = makeSong(id: 3, playCount: 45)
+        let zeroPlayRetiredSong = makeSong(id: 4, playCount: 0)
+
+        let decision = try RepairDecision(
+            duplicateGroup: [canonicalSong, firstRetiredSong, secondRetiredSong, zeroPlayRetiredSong],
+            canonicalSongID: canonicalSong.id
+        )
+
+        #expect(decision.repairAmount == 75)
+        #expect(decision.requiresRepairQueue)
+    }
+
+    @Test("Repair Amount ignores Canonical Song and excluded Library Songs")
+    func repairAmountIgnoresCanonicalSongAndExcludedSongs() throws {
+        let canonicalSong = makeSong(id: 1, playCount: 100)
+        let retiredSong = makeSong(id: 2, playCount: 30)
+        let excludedSong = makeSong(id: 3, playCount: 70)
+
+        let decision = try RepairDecision(
+            duplicateGroup: [canonicalSong, retiredSong, excludedSong],
+            canonicalSongID: canonicalSong.id,
+            excludedSongIDs: [excludedSong.id]
+        )
+
+        #expect(decision.repairAmount == 30)
+        #expect(decision.requiresRepairQueue)
+    }
+
+    @Test("Zero Repair Amount does not require a Repair Queue")
+    func zeroRepairAmountDoesNotRequireRepairQueue() throws {
+        let canonicalSong = makeSong(id: 1, playCount: 50)
+        let zeroPlayRetiredSong = makeSong(id: 2, playCount: 0)
+
+        let decision = try RepairDecision(
+            duplicateGroup: [canonicalSong, zeroPlayRetiredSong],
+            canonicalSongID: canonicalSong.id
+        )
+
+        #expect(decision.repairAmount == 0)
+        #expect(decision.requiresRepairQueue == false)
+    }
+
     // MARK: - Validation
 
     @Test("Rejects a repair decision without a Canonical Song")
