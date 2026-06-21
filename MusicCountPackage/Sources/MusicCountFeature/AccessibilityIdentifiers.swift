@@ -69,8 +69,8 @@ enum AccessibilityIdentifiers {
             "suggestions.card.\(title.replacingOccurrences(of: " ", with: "_"))"
         }
 
-        static func activeRepairRow(id: String) -> String {
-            "suggestions.activeRepair.\(id)"
+        static func markActiveRepairDoneButton(id: String) -> String {
+            "suggestions.activeRepair.done.\(id)"
         }
     }
 

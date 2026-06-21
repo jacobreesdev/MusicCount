@@ -14,6 +14,7 @@ struct SuggestionsServiceTests {
         // Clear any persisted dismissals from previous test runs
         UserDefaults.standard.removeObject(forKey: StorageKeys.dismissedSuggestions)
         UserDefaults.standard.removeObject(forKey: StorageKeys.activeRepairs)
+        UserDefaults.standard.removeObject(forKey: StorageKeys.completedRepairs)
         return SuggestionsService()
     }
 
@@ -244,6 +245,38 @@ struct SuggestionsServiceTests {
 
         #expect(service.activeRepairs == [firstActiveRepair, secondActiveRepair])
         #expect(service.activeSuggestions.isEmpty)
+    }
+
+    @Test("Marking an Active Repair done creates a Completed Repair and keeps its Suggestion hidden", .bug(id: 8))
+    func markActiveRepairDoneCompletesAndHidesSuggestion() throws {
+        defer {
+            UserDefaults.standard.removeObject(forKey: StorageKeys.activeRepairs)
+            UserDefaults.standard.removeObject(forKey: StorageKeys.completedRepairs)
+        }
+
+        let service = makeFreshService()
+        let songs = [
+            makeSong(id: 1, title: "Midnight City", artist: "M83", playCount: 140),
+            makeSong(id: 2, title: "Midnight City", artist: "M83", playCount: 22),
+        ]
+        service.analyzeSongs(songs)
+        let suggestion = try #require(service.activeSuggestions.first)
+        let repairModel = try SuggestionRepairModel(suggestion: suggestion)
+        let activeRepair = try service.createActiveRepair(from: repairModel.decision, for: suggestion)
+
+        let completedRepair = try service.markActiveRepairDone(id: activeRepair.id)
+
+        #expect(completedRepair.id == activeRepair.id)
+        #expect(service.activeRepairs.isEmpty)
+        #expect(service.completedRepairs.map(\.id) == [activeRepair.id])
+        #expect(service.activeSuggestions.isEmpty)
+
+        let restoredService = SuggestionsService()
+        restoredService.analyzeSongs(songs)
+
+        #expect(restoredService.activeRepairs.isEmpty)
+        #expect(restoredService.completedRepairs.map(\.id) == [activeRepair.id])
+        #expect(restoredService.activeSuggestions.isEmpty)
     }
 
     // MARK: - Dismissal Tests

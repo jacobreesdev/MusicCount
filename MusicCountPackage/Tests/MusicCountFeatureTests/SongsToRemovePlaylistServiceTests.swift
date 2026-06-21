@@ -106,6 +106,26 @@ struct SongsToRemovePlaylistServiceTests {
         #expect(store.playlistID == "owned-playlist")
     }
 
+    @Test("Songs to Remove Playlist removes Retired Songs from Completed Repairs", .bug(id: 8))
+    func syncRemovesRetiredSongsFromCompletedRepairs() async throws {
+        let storedPlaylist = SongsToRemovePlaylist(id: "owned-playlist", name: SongsToRemovePlaylistService.playlistName)
+        let client = FakeSongsToRemovePlaylistClient(playlists: [storedPlaylist])
+        let store = FakeSongsToRemovePlaylistStore(playlistID: storedPlaylist.id)
+        let outstandingRepair = makeActiveRepair(
+            id: "sweet-disposition-the-temper-trap",
+            canonicalSong: makeSong(id: 4, title: "Sweet Disposition", playCount: 98),
+            retiredSongs: [makeSong(id: 5, title: "Sweet Disposition", playCount: 30)]
+        )
+        let service = SongsToRemovePlaylistService(client: client, store: store)
+
+        try await service.sync(activeRepairs: [outstandingRepair])
+
+        #expect(client.replacedPlaylists == [
+            .init(playlistID: "owned-playlist", songIDs: [5])
+        ])
+        #expect(client.createdPlaylists.isEmpty)
+    }
+
     @Test("Music item ID resolver keeps Retired Song order", .bug(id: 7))
     func musicItemIDResolverKeepsRetiredSongOrder() throws {
         let resolver = SongsToRemoveMusicItemIDResolver(

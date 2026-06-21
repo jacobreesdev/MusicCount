@@ -55,6 +55,46 @@ struct SuggestionRepairWorkflowTests {
         }
     }
 
+    @Test("Completing an Active Repair syncs the Songs to Remove Playlist from outstanding Active Repairs", .bug(id: 8))
+    func completingActiveRepairSyncsPlaylistFromOutstandingActiveRepairs() async throws {
+        let completedRepairID = "midnight-city-m83"
+        let remainingRepairID = "sweet-disposition-the-temper-trap"
+        let completedActiveRepair = makeActiveRepair(id: completedRepairID, title: "Midnight City", retiredSongID: 2)
+        let remainingActiveRepair = makeActiveRepair(id: remainingRepairID, title: "Sweet Disposition", retiredSongID: 4)
+        let suggestionsService = FakeActiveRepairStore(activeRepairs: [completedActiveRepair, remainingActiveRepair])
+        let playlistService = FakePlaylistSyncService()
+        let workflow = ActiveRepairCompletionWorkflow(
+            suggestionsService: suggestionsService,
+            songsToRemovePlaylistService: playlistService
+        )
+
+        let result = try await workflow.markActiveRepairDone(id: completedRepairID)
+
+        #expect(result.completedRepair.id == completedRepairID)
+        #expect(suggestionsService.activeRepairs.map(\.id) == [remainingRepairID])
+        #expect(playlistService.syncedActiveRepairIDs == [[remainingRepairID]])
+        #expect(result.playlistSync == .synced)
+    }
+
+    @Test("Completion succeeds when Songs to Remove Playlist sync fails", .bug(id: 8))
+    func completingActiveRepairSucceedsWhenPlaylistSyncFails() async throws {
+        let activeRepair = makeActiveRepair(id: "midnight-city-m83", title: "Midnight City", retiredSongID: 2)
+        let suggestionsService = FakeActiveRepairStore(activeRepairs: [activeRepair])
+        let playlistService = FakePlaylistSyncService(error: TestPlaylistSyncError.unavailable)
+        let workflow = ActiveRepairCompletionWorkflow(
+            suggestionsService: suggestionsService,
+            songsToRemovePlaylistService: playlistService
+        )
+
+        let result = try await workflow.markActiveRepairDone(id: activeRepair.id)
+
+        #expect(result.completedRepair.id == activeRepair.id)
+        #expect(suggestionsService.activeRepairs.isEmpty)
+        #expect(suggestionsService.completedRepairs.map(\.id) == [activeRepair.id])
+        #expect(playlistService.syncedActiveRepairIDs == [[]])
+        #expect(result.playlistSync == .failed(message: "Playlist sync unavailable."))
+    }
+
     private func makeSuggestion() -> Suggestion {
         Suggestion(
             sharedTitle: "Midnight City",
@@ -76,6 +116,20 @@ struct SuggestionRepairWorkflowTests {
             hasAssetURL: true,
             mediaType: "Music",
             duration: 200
+        )
+    }
+
+    private func makeActiveRepair(id: String, title: String, retiredSongID: UInt64) -> ActiveRepair {
+        let canonicalSong = makeSong(id: retiredSongID - 1, playCount: 140)
+        let retiredSong = makeSong(id: retiredSongID, playCount: 22)
+
+        return ActiveRepair(
+            id: id,
+            suggestionTitle: title,
+            suggestionArtist: "Test Artist",
+            canonicalSong: canonicalSong,
+            retiredSongs: [retiredSong],
+            repairAmount: retiredSong.playCount
         )
     }
 }
@@ -106,6 +160,11 @@ private final class FakeRepairQueueService: RepairQueueAdding {
 @MainActor
 private final class FakeActiveRepairStore: ActiveRepairManaging {
     private(set) var activeRepairs: [ActiveRepair] = []
+    private(set) var completedRepairs: [CompletedRepair] = []
+
+    init(activeRepairs: [ActiveRepair] = []) {
+        self.activeRepairs = activeRepairs
+    }
 
     func createActiveRepair(from decision: RepairDecision, for suggestion: Suggestion) throws -> ActiveRepair {
         guard hasActiveRepair(for: suggestion) == false else {
@@ -130,12 +189,24 @@ private final class FakeActiveRepairStore: ActiveRepairManaging {
                 $0.suggestionArtist == suggestion.sharedArtist
         }
     }
+
+    func markActiveRepairDone(id: String) throws -> CompletedRepair {
+        guard let activeRepairIndex = activeRepairs.firstIndex(where: { $0.id == id }) else {
+            throw ActiveRepairError.notFound
+        }
+
+        let activeRepair = activeRepairs.remove(at: activeRepairIndex)
+        let completedRepair = CompletedRepair(activeRepair: activeRepair)
+        completedRepairs.append(completedRepair)
+        return completedRepair
+    }
 }
 
 @MainActor
 private final class FakePlaylistSyncService: SongsToRemovePlaylistSyncing {
     private let error: (any Error)?
     private(set) var syncedActiveRepairCounts: [Int] = []
+    private(set) var syncedActiveRepairIDs: [[String]] = []
 
     init(error: (any Error)? = nil) {
         self.error = error
@@ -143,6 +214,7 @@ private final class FakePlaylistSyncService: SongsToRemovePlaylistSyncing {
 
     func sync(activeRepairs: [ActiveRepair]) async throws {
         syncedActiveRepairCounts.append(activeRepairs.count)
+        syncedActiveRepairIDs.append(activeRepairs.map(\.id))
 
         if let error {
             throw error

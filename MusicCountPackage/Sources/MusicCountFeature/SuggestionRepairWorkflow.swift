@@ -13,6 +13,7 @@ protocol ActiveRepairManaging: AnyObject {
 
     func createActiveRepair(from decision: RepairDecision, for suggestion: Suggestion) throws -> ActiveRepair
     func hasActiveRepair(for suggestion: Suggestion) -> Bool
+    func markActiveRepairDone(id: String) throws -> CompletedRepair
 }
 
 extension SuggestionsService: ActiveRepairManaging {}
@@ -31,6 +32,11 @@ enum SongsToRemovePlaylistSyncResult: Equatable, Sendable {
 
 struct SuggestionRepairWorkflowResult: Equatable, Sendable {
     let activeRepair: ActiveRepair
+    let playlistSync: SongsToRemovePlaylistSyncResult
+}
+
+struct ActiveRepairCompletionWorkflowResult: Equatable, Sendable {
+    let completedRepair: CompletedRepair
     let playlistSync: SongsToRemovePlaylistSyncResult
 }
 
@@ -63,6 +69,34 @@ struct SuggestionRepairWorkflow {
         } catch {
             return SuggestionRepairWorkflowResult(
                 activeRepair: activeRepair,
+                playlistSync: .failed(message: error.localizedDescription)
+            )
+        }
+    }
+}
+
+@MainActor
+struct ActiveRepairCompletionWorkflow {
+    private let suggestionsService: any ActiveRepairManaging
+    private let songsToRemovePlaylistService: any SongsToRemovePlaylistSyncing
+
+    init(
+        suggestionsService: any ActiveRepairManaging,
+        songsToRemovePlaylistService: any SongsToRemovePlaylistSyncing
+    ) {
+        self.suggestionsService = suggestionsService
+        self.songsToRemovePlaylistService = songsToRemovePlaylistService
+    }
+
+    func markActiveRepairDone(id: String) async throws -> ActiveRepairCompletionWorkflowResult {
+        let completedRepair = try suggestionsService.markActiveRepairDone(id: id)
+
+        do {
+            try await songsToRemovePlaylistService.sync(activeRepairs: suggestionsService.activeRepairs)
+            return ActiveRepairCompletionWorkflowResult(completedRepair: completedRepair, playlistSync: .synced)
+        } catch {
+            return ActiveRepairCompletionWorkflowResult(
+                completedRepair: completedRepair,
                 playlistSync: .failed(message: error.localizedDescription)
             )
         }
