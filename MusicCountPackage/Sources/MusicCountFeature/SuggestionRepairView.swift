@@ -5,6 +5,7 @@ struct SuggestionRepairView: View {
     let onDismiss: () -> Void
 
     @Environment(AppleMusicQueueService.self) private var queueService
+    @Environment(SuggestionsService.self) private var suggestionsService
     @State private var model: SuggestionRepairModel
     @State private var showingSuccessAlert = false
     @State private var showingErrorAlert = false
@@ -188,9 +189,13 @@ struct SuggestionRepairView: View {
 
         do {
             try queueService.addToQueue(song: model.canonicalSong, count: model.repairAmount)
+            _ = try suggestionsService.createActiveRepair(from: model.decision, for: suggestion)
             showingSuccessAlert = true
         } catch let error as AppleMusicQueueService.QueueError {
             errorMessage = error.localizedDescription
+            showingErrorAlert = true
+        } catch let error as ActiveRepairError {
+            errorMessage = errorMessage(for: error)
             showingErrorAlert = true
         } catch {
             errorMessage = "An unexpected error occurred. Please try again."
@@ -217,6 +222,8 @@ struct SuggestionRepairView: View {
             return "At least one Retired Song is required."
         case RepairDecisionError.canonicalSongCannotBeExcluded:
             return "The Canonical Song cannot be retired or excluded."
+        case ActiveRepairError.alreadyExists:
+            return "This Suggestion already has an Active Repair."
         default:
             return "The repair decision could not be updated."
         }

@@ -61,11 +61,16 @@ enum AccessibilityIdentifiers {
 
     enum Suggestions {
         static let suggestionsList = "suggestions.list"
+        static let activeRepairsSection = "suggestions.activeRepairs"
         static let sortButton = "suggestions.sortButton"
         static let emptyState = "suggestions.emptyState"
 
         static func suggestionCard(title: String) -> String {
             "suggestions.card.\(title.replacingOccurrences(of: " ", with: "_"))"
+        }
+
+        static func activeRepairRow(id: String) -> String {
+            "suggestions.activeRepair.\(id)"
         }
     }
 

@@ -13,6 +13,7 @@ struct SuggestionsServiceTests {
     private func makeFreshService() -> SuggestionsService {
         // Clear any persisted dismissals from previous test runs
         UserDefaults.standard.removeObject(forKey: StorageKeys.dismissedSuggestions)
+        UserDefaults.standard.removeObject(forKey: StorageKeys.activeRepairs)
         return SuggestionsService()
     }
 
@@ -133,6 +134,72 @@ struct SuggestionsServiceTests {
         #expect(active.count == 2)
         #expect(active[0].playCountDifference == 100) // Higher difference first
         #expect(active[1].playCountDifference == 50)
+    }
+
+    // MARK: - Active Repair Tests
+
+    @Test("Building a Repair Queue creates an Active Repair and hides its Suggestion", .bug(id: 5))
+    func createActiveRepairHidesSuggestion() throws {
+        let service = makeFreshService()
+        let songs = [
+            makeSong(id: 1, title: "Midnight City", artist: "M83", playCount: 140),
+            makeSong(id: 2, title: "Midnight City", artist: "M83", playCount: 22),
+        ]
+        service.analyzeSongs(songs)
+        let suggestion = try #require(service.activeSuggestions.first)
+        let repairModel = try SuggestionRepairModel(suggestion: suggestion)
+
+        let activeRepair = try service.createActiveRepair(from: repairModel.decision, for: suggestion)
+
+        #expect(service.activeRepairs == [activeRepair])
+        #expect(activeRepair.suggestionTitle == "Midnight City")
+        #expect(activeRepair.suggestionArtist == "M83")
+        #expect(activeRepair.canonicalSong.id == 1)
+        #expect(activeRepair.retiredSongs.map(\.id) == [2])
+        #expect(activeRepair.repairAmount == 22)
+        #expect(service.activeSuggestions.isEmpty)
+    }
+
+    @Test("A Suggestion can have at most one Active Repair", .bug(id: 5))
+    func rejectsDuplicateActiveRepair() throws {
+        let service = makeFreshService()
+        let songs = [
+            makeSong(id: 1, title: "Midnight City", artist: "M83", playCount: 140),
+            makeSong(id: 2, title: "Midnight City", artist: "M83", playCount: 22),
+        ]
+        service.analyzeSongs(songs)
+        let suggestion = try #require(service.activeSuggestions.first)
+        let repairModel = try SuggestionRepairModel(suggestion: suggestion)
+
+        _ = try service.createActiveRepair(from: repairModel.decision, for: suggestion)
+
+        #expect(throws: ActiveRepairError.alreadyExists) {
+            try service.createActiveRepair(from: repairModel.decision, for: suggestion)
+        }
+        #expect(service.activeRepairs.count == 1)
+    }
+
+    @Test("Active Repair state survives a new service instance", .bug(id: 5))
+    func activeRepairSurvivesNewServiceInstance() throws {
+        defer {
+            UserDefaults.standard.removeObject(forKey: StorageKeys.activeRepairs)
+        }
+
+        let service = makeFreshService()
+        let songs = [
+            makeSong(id: 1, title: "Midnight City", artist: "M83", playCount: 140),
+            makeSong(id: 2, title: "Midnight City", artist: "M83", playCount: 22),
+        ]
+        service.analyzeSongs(songs)
+        let suggestion = try #require(service.activeSuggestions.first)
+        let repairModel = try SuggestionRepairModel(suggestion: suggestion)
+        let activeRepair = try service.createActiveRepair(from: repairModel.decision, for: suggestion)
+
+        let restoredService = SuggestionsService()
+        restoredService.analyzeSongs(songs)
+
+        #expect(restoredService.activeRepairs == [activeRepair])
+        #expect(restoredService.activeSuggestions.isEmpty)
     }
 
     // MARK: - Dismissal Tests

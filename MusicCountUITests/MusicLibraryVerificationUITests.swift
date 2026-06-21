@@ -15,12 +15,18 @@ final class MusicLibraryVerificationUITests: XCTestCase {
     }
 
     @MainActor
-    func testExample() throws {
-        // UI tests must launch the application that they test.
+    func testMockDataLaunchShowsLibraryAndSuggestions() throws {
         let app = XCUIApplication()
+        app.launchArguments.append("-MockData")
         app.launch()
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        XCTAssertTrue(true)
+        XCTAssertFalse(app.staticTexts["Access Denied"].exists)
+        XCTAssertTrue(app.staticTexts["Blinding Lights"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.searchFields["Search songs"].exists)
+
+        app.tabBars.buttons["Suggestions"].tap()
+
+        XCTAssertTrue(app.searchFields["Search suggestions"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Blinding Lights"].waitForExistence(timeout: 10))
     }
 }
