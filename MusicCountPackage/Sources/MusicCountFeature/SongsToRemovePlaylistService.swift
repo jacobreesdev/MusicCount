@@ -156,11 +156,16 @@ final class SongsToRemovePlaylistService {
 
         if let storedPlaylistID = store.playlistID {
             if let playlist = try await client.playlist(id: storedPlaylistID) {
-                try await client.replaceItems(in: playlist, with: songIDs)
-                return
+                do {
+                    try await client.replaceItems(in: playlist, with: songIDs)
+                    return
+                } catch let error as SongsToRemovePlaylistError {
+                    guard case .playlistNotFound = error else { throw error }
+                    store.playlistID = nil
+                }
+            } else {
+                store.playlistID = nil
             }
-
-            store.playlistID = nil
         }
 
         guard songIDs.isEmpty == false else { return }

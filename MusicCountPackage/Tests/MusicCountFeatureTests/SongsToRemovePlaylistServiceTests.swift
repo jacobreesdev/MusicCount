@@ -144,6 +144,28 @@ struct SongsToRemovePlaylistServiceTests {
         #expect(store.playlistID == "playlist-1")
     }
 
+    @Test("Songs to Remove Playlist recreates a playlist when replacement finds the stored playlist missing", .bug(id: 20))
+    func syncRecreatesPlaylistWhenReplacementFindsStoredPlaylistMissing() async throws {
+        let storedPlaylist = SongsToRemovePlaylist(id: "owned-playlist", name: SongsToRemovePlaylistService.playlistName)
+        let client = FakeSongsToRemovePlaylistClient(
+            playlists: [storedPlaylist],
+            replaceItemsError: SongsToRemovePlaylistError.playlistNotFound(storedPlaylist.id)
+        )
+        let store = FakeSongsToRemovePlaylistStore(playlistID: storedPlaylist.id)
+        let activeRepair = makeActiveRepair(
+            id: "midnight-city-m83",
+            canonicalSong: makeSong(id: 1, title: "Midnight City", playCount: 140),
+            retiredSongs: [makeSong(id: 2, title: "Midnight City", playCount: 22)]
+        )
+        let service = SongsToRemovePlaylistService(client: client, store: store)
+
+        try await service.sync(activeRepairs: [activeRepair])
+
+        #expect(client.createdPlaylists.map(\.songIDs) == [[2]])
+        #expect(store.playlistID == "playlist-1")
+        #expect(service.syncProblem == nil)
+    }
+
     @Test("Songs to Remove Playlist exposes stale state after sync failure", .bug(id: 20))
     func syncFailureMarksPlaylistStale() async throws {
         let storedPlaylist = SongsToRemovePlaylist(id: "owned-playlist", name: SongsToRemovePlaylistService.playlistName)
