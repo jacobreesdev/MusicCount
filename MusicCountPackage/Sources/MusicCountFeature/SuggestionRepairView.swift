@@ -203,7 +203,12 @@ struct SuggestionRepairView: View {
     }
 
     private func accessibilityLabel(for song: SongInfo) -> String {
-        "\(song.album), \(song.playCount.formatted()) plays, \(model.role(for: song).accessibilityLabel)"
+        [
+            "\(song.title) by \(song.artist)",
+            "album \(song.album)",
+            "\(song.playCount.formatted()) plays",
+            model.role(for: song).accessibilityLabel,
+        ].joined(separator: ", ")
     }
 
     private func errorMessage(for error: Error) -> String {
@@ -299,17 +304,25 @@ private struct RepairSongRowContent<TrailingContent: View>: View {
             RepairArtworkView(image: song.artworkImage)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(song.album)
+                Text(song.title)
                     .font(.headline)
                     .foregroundStyle(.primary)
+                    .lineLimit(2)
+
+                Text(song.artist)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
 
                 HStack(spacing: 6) {
+                    Text(song.album)
+                        .foregroundStyle(.secondary)
                     Text("\(song.playCount) plays")
+                        .foregroundStyle(.secondary)
                     Text(role.label)
+                        .foregroundStyle(role.color)
                 }
                 .font(.caption)
-                .foregroundStyle(role.color)
             }
 
             Spacer()
