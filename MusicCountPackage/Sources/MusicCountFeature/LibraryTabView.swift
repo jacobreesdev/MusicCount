@@ -194,16 +194,8 @@ struct LibraryTabView: View {
     private func libraryView(songs: [SongInfo]) -> some View {
         let filtered = filteredSongs(from: songs)
 
-        if filtered.isEmpty {
-            return AnyView(
-                emptyLibraryState
-                    .toolbar(.hidden, for: .navigationBar)
-            )
-        }
-
-        return AnyView(
-            List {
-                ForEach(filtered) { song in
+        return List {
+            ForEach(filtered) { song in
                 SongRowView(
                     song: song,
                     selectionSlot: selectionSlot(for: song)
@@ -275,24 +267,31 @@ struct LibraryTabView: View {
         .scrollContentBackground(.hidden)
         .background(Color(.systemGroupedBackground))
         .contentMargins(.top, 0, for: .scrollContent)
+        .overlay {
+            if filtered.isEmpty {
+                emptyLibraryState
+            }
+        }
         .searchable(text: $searchText, placement: .automatic, prompt: "Search songs")
         .overlay(alignment: .bottom) {
-            FloatingActionButton(
-                selectedCount: selectionCount,
-                isEnabled: selectedSong1 != nil || selectedSong2 != nil,
-                action: {
-                    if selectionCount == 1 {
-                        // Single song selected - show manual queue
-                        showingManualQueue = true
-                    } else if selectionCount == 2 {
-                        // Both songs selected - show comparison
-                        showingComparison = true
+            if filtered.isEmpty == false {
+                FloatingActionButton(
+                    selectedCount: selectionCount,
+                    isEnabled: selectedSong1 != nil || selectedSong2 != nil,
+                    action: {
+                        if selectionCount == 1 {
+                            // Single song selected - show manual queue
+                            showingManualQueue = true
+                        } else if selectionCount == 2 {
+                            // Both songs selected - show comparison
+                            showingComparison = true
+                        }
                     }
-                }
-            )
-            .opacity(showingComparison || showingManualQueue ? 0 : 1)
-            .animation(.easeInOut(duration: 0.3), value: showingComparison)
-            .animation(.easeInOut(duration: 0.3), value: showingManualQueue)
+                )
+                .opacity(showingComparison || showingManualQueue ? 0 : 1)
+                .animation(.easeInOut(duration: 0.3), value: showingComparison)
+                .animation(.easeInOut(duration: 0.3), value: showingManualQueue)
+            }
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -311,12 +310,11 @@ struct LibraryTabView: View {
                 clearButton
             }
         }
-        )
     }
 
     private var emptyLibraryState: some View {
         ContentUnavailableView {
-            Text("No Songs Found")
+            Text(searchText.isEmpty ? "No Songs Found" : "No Matching Songs")
                 .font(.title2.weight(.semibold))
         } description: {
             Text(searchText.isEmpty

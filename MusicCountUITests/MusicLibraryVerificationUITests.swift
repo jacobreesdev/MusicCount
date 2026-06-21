@@ -31,6 +31,59 @@ final class MusicLibraryVerificationUITests: XCTestCase {
     }
 
     @MainActor
+    func testLibraryNoResultsSearchKeepsSearchFieldReachable() throws {
+        let app = XCUIApplication()
+        app.launchArguments.append(contentsOf: ["-MockData", "-ResetRepairState"])
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Blinding Lights"].waitForExistence(timeout: 20))
+
+        let searchField = app.searchFields["Search songs"]
+        XCTAssertTrue(searchField.exists)
+
+        let noMatchQuery = "zzzz-no-results"
+        searchField.tap()
+        searchField.typeText(noMatchQuery)
+
+        XCTAssertTrue(
+            app.searchFields["Search songs"].waitForExistence(timeout: 2),
+            "The Library search field should remain reachable when there are no matching Library Songs."
+        )
+        XCTAssertTrue(app.staticTexts["No Matching Songs"].waitForExistence(timeout: 2))
+
+        clearSearchField(app.searchFields["Search songs"], in: app, deleting: noMatchQuery)
+
+        XCTAssertTrue(app.staticTexts["Blinding Lights"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
+    func testSuggestionsNoResultsSearchKeepsSearchFieldReachable() throws {
+        let app = XCUIApplication()
+        app.launchArguments.append(contentsOf: ["-MockData", "-ResetRepairState"])
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Blinding Lights"].waitForExistence(timeout: 20))
+
+        app.tabBars.buttons["Suggestions"].tap()
+        XCTAssertTrue(app.searchFields["Search suggestions"].waitForExistence(timeout: 10))
+
+        let searchField = app.searchFields["Search suggestions"]
+        let noMatchQuery = "zzzz-no-results"
+        searchField.tap()
+        searchField.typeText(noMatchQuery)
+
+        XCTAssertTrue(
+            app.searchFields["Search suggestions"].waitForExistence(timeout: 2),
+            "The Suggestions search field should remain reachable when there are no matching Suggestions."
+        )
+        XCTAssertTrue(app.staticTexts["No Matching Suggestions"].waitForExistence(timeout: 2))
+
+        clearSearchField(app.searchFields["Search suggestions"], in: app, deleting: noMatchQuery)
+
+        XCTAssertTrue(app.staticTexts["Blinding Lights"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
     func testMockActiveRepairCanBeMarkedDone() throws {
         let app = XCUIApplication()
         app.launchArguments.append(contentsOf: ["-MockData", "-MockActiveRepairs"])
@@ -56,5 +109,17 @@ final class MusicLibraryVerificationUITests: XCTestCase {
 
         XCTAssertFalse(completedRepairDoneButton.waitForExistence(timeout: 2))
         XCTAssertTrue(app.buttons["suggestions.activeRepair.done.shake it off-taylor swift"].waitForExistence(timeout: 5))
+    }
+
+    private func clearSearchField(_ searchField: XCUIElement, in app: XCUIApplication, deleting query: String) {
+        let clearTextButton = app.buttons["Clear text"].firstMatch
+        if clearTextButton.waitForExistence(timeout: 2) {
+            clearTextButton.tap()
+        } else {
+            searchField.tap()
+            for _ in query {
+                searchField.typeText(XCUIKeyboardKey.delete.rawValue)
+            }
+        }
     }
 }
