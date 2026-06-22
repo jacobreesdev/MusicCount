@@ -9,7 +9,7 @@ struct LibraryTabView: View {
 
     var body: some View {
         NavigationStack {
-            Group {-
+            Group {
                 switch service.authorizationState {
                 case .notDetermined:
                     unauthorizedView
