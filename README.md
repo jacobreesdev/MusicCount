@@ -1,104 +1,173 @@
 # MusicCount
 
-**Match your play counts before cleaning up duplicates**
+**Repair split Apple Music play counts before cleaning up duplicate Library Songs**
 
-Swift 6.1 · SwiftUI · MediaPlayer · Swift Concurrency · Swift Testing · iOS 17.0+
+SwiftUI · MediaPlayer · MusicKit · Swift Concurrency · Swift Testing · iOS 18.0+
 
 [Download on the App Store](https://apps.apple.com/gb/app/musiccount/id6754639829)
 
+![MusicCount Suggestions screen showing artwork-backed mock data](README-assets/suggestions-first.jpg)
+
+_Captured from the `MusicLibraryVerification` scheme on an iPhone simulator with `-MockData`, `-ResetRepairState`, and an artwork-backed mock export._
+
 ---
 
-## The Product
+## Product
 
-I built this because my own library was a mess. Years of re-importing albums and switching between Spotify and Apple Music left me with duplicate songs everywhere, each with different play counts. It was also my first Swift app. I wanted to learn iOS development properly, and building something I'd actually use seemed like the best way to do it.
+MusicCount helps Apple Music users repair listening history that has been split across duplicate Library Songs. It scans the user's library on-device, groups possible duplicates by normalized title and artist, and surfaces Suggestions where the versions have different Play Counts.
 
-MusicCount scans your library, groups duplicates by normalised title and artist, and lets you pick the version you want to keep. Queue it enough times to match the play count of the duplicate, then delete the duplicate yourself. Your listening history stays intact on the song that matters.
+The core workflow is Suggestions-first:
+
+- Review a Suggestion for a Duplicate Group with a Play Count Gap.
+- Choose the Canonical Song that should keep the listening history.
+- Confirm which versions are Retired Songs.
+- Build a Repair Queue that repeats the Canonical Song by the calculated Repair Amount.
+- Follow through in Apple Music, then mark the Active Repair done in MusicCount.
+
+MusicCount does not delete songs from the user's library and does not infer that a repair is complete. Retired Songs are collected in one app-owned Songs to Remove Playlist as a handoff checklist, and the user marks each Active Repair as a Completed Repair after the real-world cleanup is done.
+
+The full Library Song browser is still available as a secondary surface for search, inspection, sorting, and manual queueing, but the primary path starts from Suggestions and repair decisions.
 
 ---
 
 ## Features
 
-### Intelligent Duplicate Detection
+### Suggestions-First Repair
 
-Nothing worse than seeing your most-played song split across three versions. The app normalises strings to catch duplicates across case variations, whitespace differences, and encoding quirks. It crunches through thousands of songs on a background thread, grouping by both title and artist so you don't get false positives from different songs with the same name. Groups with the biggest play count gaps float to the top.
+Suggestions are built from Duplicate Groups whose Library Songs share a normalized title and artist but have different Play Counts. The largest Play Count Gaps float to the top, so the app starts with the most valuable repair opportunities.
 
-### Interactive Play Count Comparison
+### Canonical Song Decisions
 
-A side-by-side view with blurred album artwork in the background. Tap the card for the version you want to keep, and that's the one that gets queued. Two modes: **Match Mode** queues it enough times to match the duplicate's play count, while **Add Mode** adds plays equal to the duplicate's total.
+Each repair is framed around one Canonical Song and one or more Retired Songs. By default, every non-canonical Library Song in the Duplicate Group is treated as retired, with the option to exclude genuinely distinct versions.
 
-Hooks directly into Apple's music player with two queue behaviours: **Insert Next** slots songs after whatever's playing, and **Replace Queue** clears everything and starts fresh. Once you've played through the queue, you can delete the duplicate knowing your play history is preserved on the right track.
+### Repair Queue Creation
 
-### Smart Dismissal System
+MusicCount calculates the Repair Amount from the included Retired Songs, then builds an Apple Music playback queue for the Canonical Song. When the queue is built, the Suggestion moves out of normal review and becomes an Active Repair.
 
-You can dismiss individual songs from groups with 3+ versions, or swipe to bin an entire group. Dismissals persist between launches, because nobody wants to dismiss the same suggestion every time they open the app.
+### Active Repairs and Completed Repairs
 
-### Sorting & Search
+Active Repairs keep track of the Canonical Song, Retired Songs, and Repair Amount while the user finishes the work outside the app. Repairs become Completed Repairs only when the user marks them done.
 
-Browse your entire library sorted by play count, title, artist, album, or version count, each ascending or descending. Seven sort options in total for the suggestions view. Search is real-time across titles, artists, and albums with proper Unicode handling. Search narrows things down first, then sort reorders what's left.
+### Songs to Remove Playlist
 
-### Accessibility
+Because MusicCount cannot remove Retired Songs from a user's Apple Music library, it maintains one app-owned Songs to Remove Playlist. The playlist contains Retired Songs from outstanding Active Repairs and is updated when repairs are completed.
 
-VoiceOver labels and hints on every interactive element. Tab bar badges show the suggestion count at a glance. Comparison cards are grouped so screen readers don't have to wade through each element individually. Dynamic Type works throughout, and everything uses semantic font styles.
+### Search, Sorting, and Dismissals
+
+Suggestions and Library Songs support search and sorting. Dismissals hide either an entire Suggestion or one Library Song inside a Suggestion, so known non-problems do not keep coming back.
 
 ---
 
-## How It's Built
+## Architecture
 
-### Architecture Decisions
+The app target is intentionally thin: `MusicCount/MusicCountApp.swift` launches the Swift package feature module and switches to a debug-only physical library export view when requested.
 
-As a first iOS project, I wanted to start with good habits rather than learn bad ones.
+Most product code lives in `MusicCountPackage/Sources/MusicCountFeature`:
 
-**Native State Management**
+- `MainTabView` wires Suggestions, Library, and Settings together with SwiftUI environment injection.
+- `MusicLibraryService` loads real Library Songs through MediaPlayer; `MockMusicLibraryService` supports deterministic development and UI verification.
+- `SuggestionsService` analyzes Duplicate Groups and persists Dismissals, Active Repairs, and Completed Repairs locally.
+- `SuggestionRepairWorkflow` coordinates Repair Queue creation, Active Repair creation, and Songs to Remove Playlist sync.
+- `AppleMusicQueueService` talks to the system music player.
+- `SongsToRemovePlaylistService` owns the app-created playlist handoff through MusicKit.
 
-With iOS 17's new observation system, the traditional ViewModel layer has become optional for most apps. I leaned into this, so views stay thin and business logic lives in services. No boilerplate, no manual change notifications. Services are shared via dependency injection, which gives global access without falling back on singletons.
+The project uses SwiftUI's Observation model for app state, Swift Concurrency for async library and playlist work, and small service seams so repair rules can be tested without a live Apple Music library.
 
-**Modular Package Architecture**
+The product decisions behind the implementation are:
 
-All the features live in a separate Swift Package. The app target is just a thin wrapper that imports it and launches the main view. Keeps things modular and testable, and means you can modify feature code without touching project configuration files. Tests sit alongside the feature code rather than in a separate target.
+- Suggestions are the primary surface.
+- Repairs happen at the Duplicate Group level.
+- A repair has one Canonical Song and one or more Retired Songs.
+- Queued Suggestions become Active Repairs.
+- Repairs are marked done manually.
+- The Songs to Remove Playlist is a single app-owned playlist.
 
-**Background Thread Library Scanning**
+---
 
-Querying the music library can hang the main thread when you've got thousands of songs. I offloaded the query onto a background thread, then hopped back to the main thread for UI updates. The interface stays responsive during the initial load, with a proper loading state that reflects actual progress.
+## Run Locally
 
-### Security & Privacy
+Requirements:
 
-- **Data Not Collected:** App Store privacy label confirms zero data collection
-- **Sandboxed Media Access:** Proper permission handling for all authorisation states
-- **On-Device Processing:** No network calls, everything happens locally
-- **Local Storage:** Dismissals saved locally with prefixed keys to avoid collisions
-- **Zero Dependencies:** No external frameworks or analytics SDKs
+- Xcode with iOS 18.0+ SDK support.
+- An available iPhone simulator.
+- Apple Music library permission for real-library runs.
 
-### Performance
+Open the workspace and run the shared scheme:
 
-- **1.7 MB App Size:** No bloat, just the essentials
-- **Background Threading:** All library queries happen off the main thread, so the UI stays snappy even with large libraries
-- **Lazy Image Loading:** Album artwork fetched at thumbnail size rather than full resolution, which makes a real difference to memory usage
-- **Normalised String Caching:** Duplicate detection keys get computed once per song, not on every comparison
-- **Efficient Filtering:** Active suggestions are a computed property, so dismissing something doesn't trigger a full re-scan
+```sh
+open MusicLibraryVerification.xcworkspace
+```
 
-### Accessibility
+In Xcode, select the `MusicLibraryVerification` scheme and an iPhone simulator, then run.
 
-Built to Apple's Human Interface Guidelines. Every button has proper labels and hints for screen readers. Complex UI components are grouped to keep navigation manageable. All text uses semantic font styles so system-wide text size preferences are respected.
+For deterministic mock data, add these launch arguments to the scheme:
 
-### Testing
+```text
+-MockData -ResetRepairState
+```
 
-Overkill for a side project? Maybe. But I wanted to learn how to test properly, not just ship something. Built the test suite with Swift's modern testing framework. Coverage includes: service tests for grouping logic, dismissal persistence, and case insensitivity; queue behaviour tests for insertion modes and edge cases; model tests for validation and aggregation; and sort tests for all seven algorithms. Production uses real library data, while tests and UI development use a mock service with deterministic random generation.
+Useful debug launch arguments:
+
+```text
+-MockData
+-ResetRepairState
+-MockActiveRepairs
+-MockDataExportPath /path/to/LibrarySongExports/export-YYYYMMDD-HHMMSS
+```
+
+The Swift package imports iOS frameworks such as UIKit, MediaPlayer, and MusicKit, so host-only SwiftPM commands can fail before tests run. Use the Xcode workspace, scheme, and an iPhone simulator for normal verification.
+
+---
+
+## Verification
+
+The `MusicLibraryVerification` test plan includes:
+
+- `MusicCountFeatureTests` for model rules, Suggestion analysis, repair decisions, Repair Queue behavior, Songs to Remove Playlist sync behavior, export loading, and preview scenarios.
+- `MusicCountUITests` for deterministic mock-data launch, Suggestions-first navigation, secondary Library Song manual queueing, search empty-state recovery, long Library Song text wrapping, Active Repair completion, and playlist retry behavior.
+
+CLI check:
+
+```sh
+xcodebuild \
+  -workspace MusicLibraryVerification.xcworkspace \
+  -scheme MusicLibraryVerification \
+  -configuration Debug \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  test
+```
+
+If that simulator is not installed, choose another available iPhone simulator and update the `-destination` value.
+
+The README screenshot was produced from a successful simulator build and launch using the same workspace and scheme:
+
+```text
+MusicLibraryVerification · iPhone 17 Pro · -MockData -ResetRepairState -MockDataExportPath <export>
+```
+
+---
+
+## What I Would Do Next
+
+- #33 Add GitHub Actions PR verification for MusicCount.
+- #34 Decide MusicCount's iPad support scope.
+- #12 Decompose the architecture review findings into focused follow-up slices.
 
 ---
 
 ## Tech Stack
 
-**UI:** SwiftUI (iOS 17.0+)
+**UI:** SwiftUI
 
-**Language:** Swift 6.1 with strict concurrency checking
+**Apple frameworks:** MediaPlayer, MusicKit
 
-**Concurrency:** async/await, actors, main thread isolation
+**Language:** Swift 6.1 package tools, Swift Concurrency
 
-**State:** Native observation system, dependency injection
+**State:** SwiftUI Observation, environment-injected services, local UserDefaults-backed repair state
 
-**Testing:** Swift Testing framework
+**Testing:** Swift Testing plus XCTest UI tests through the `MusicLibraryVerification` scheme
 
-**Architecture:** Modular package structure
+**Dependencies:** No third-party runtime dependencies
 
 ---
 
