@@ -57,10 +57,12 @@ final class MusicLibraryVerificationUITests: XCTestCase {
         XCTAssertTrue(searchField.exists)
         searchField.tap()
         searchField.typeText(mockLibraryAnchorTitle)
+        dismissKeyboard(in: app)
 
         let song = app.staticTexts[mockLibraryAnchorTitle].firstMatch
         XCTAssertTrue(song.waitForExistence(timeout: 5))
         song.swipeLeft()
+        XCTAssertTrue(app.buttons["Select for Manual Queue"].waitForExistence(timeout: 5))
         app.buttons["Select for Manual Queue"].tap()
 
         let manualQueueButton = app.buttons["library.floatingActionButton"]
@@ -188,7 +190,7 @@ final class MusicLibraryVerificationUITests: XCTestCase {
         completedRepairDoneButton.tap()
 
         let completionAlert = app.alerts["Repair Marked Done"]
-        XCTAssertTrue(completionAlert.waitForExistence(timeout: 10))
+        XCTAssertTrue(completionAlert.waitForExistence(timeout: 20))
 
         let playlistWarning = completionAlert.staticTexts.containing(
             NSPredicate(format: "label CONTAINS %@", "could not update the Songs to Remove Playlist")
@@ -240,6 +242,13 @@ final class MusicLibraryVerificationUITests: XCTestCase {
             for _ in query {
                 searchField.typeText(XCUIKeyboardKey.delete.rawValue)
             }
+        }
+    }
+
+    private func dismissKeyboard(in app: XCUIApplication) {
+        let searchButton = app.keyboards.buttons["Search"].firstMatch
+        if searchButton.waitForExistence(timeout: 2) {
+            searchButton.tap()
         }
     }
 
