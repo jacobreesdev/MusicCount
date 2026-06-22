@@ -157,19 +157,7 @@ struct SuggestionsTabView: View {
     }
 
     private func loadingView(title: String, message: String) -> some View {
-        VStack(spacing: 20) {
-            ProgressView()
-                .scaleEffect(1.5)
-
-            Text(title)
-                .font(.title2.weight(.semibold))
-
-            Text(message)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal)
-        }
-        .padding()
+        MusicCountLoadingStateView(title: title, message: message)
     }
 
     private func unavailableView(
@@ -178,20 +166,12 @@ struct SuggestionsTabView: View {
         systemImage: String,
         color: Color
     ) -> some View {
-        VStack(spacing: 20) {
-            Image(systemName: systemImage)
-                .font(.system(size: 80))
-                .foregroundStyle(color)
-
-            Text(title)
-                .font(.title2.weight(.semibold))
-
-            Text(message)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal)
-        }
-        .padding()
+        MusicCountUnavailableStateView(
+            title: title,
+            message: message,
+            systemImage: systemImage,
+            color: color
+        )
     }
 
     private var repairWorkList: some View {
@@ -566,3 +546,99 @@ enum SuggestionSortOption: String, CaseIterable, Identifiable, Sendable {
         }
     }
 }
+
+#if DEBUG
+#Preview("Suggestions - Loading") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            loadingState: .loading,
+            suggestions: []
+        )
+}
+
+#Preview("Suggestions - Empty") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            loadingState: .loaded([]),
+            suggestions: []
+        )
+}
+
+#Preview("Suggestions - Populated") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment()
+}
+
+#Preview("Suggestions - High Play Count Gap") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            suggestions: [MusicCountPreviewData.largeRepairAmountSuggestion]
+        )
+}
+
+#Preview("Suggestions - Long Library Song Metadata") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            suggestions: [MusicCountPreviewData.longMetadataSuggestion]
+        )
+}
+
+#Preview("Suggestions - Library Error") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            loadingState: .error("MusicCount could not load the preview music library."),
+            suggestions: []
+        )
+}
+
+#Preview("Suggestions - Access Denied") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            authorizationState: .denied,
+            loadingState: .idle,
+            suggestions: []
+        )
+}
+
+#Preview("Suggestions - Access Restricted") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            authorizationState: .restricted,
+            loadingState: .idle,
+            suggestions: []
+        )
+}
+
+#Preview("Active Repairs - Queued") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            suggestions: [],
+            activeRepairs: [MusicCountPreviewData.activeRepairs[0]]
+        )
+}
+
+#Preview("Active Repairs - Multiple") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            suggestions: [],
+            activeRepairs: MusicCountPreviewData.activeRepairs
+        )
+}
+
+#Preview("Completed Repair - All Suggestions Reviewed") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            suggestions: [MusicCountPreviewData.blindingLightsSuggestion],
+            completedRepairs: [MusicCountPreviewData.completedRepair]
+        )
+}
+
+#Preview("Songs to Remove Playlist - Sync Failure") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            suggestions: [],
+            activeRepairs: MusicCountPreviewData.activeRepairs,
+            playlistSyncProblem: "MusicCount could not update its app-owned Songs to Remove Playlist."
+        )
+}
+#endif

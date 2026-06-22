@@ -2,6 +2,11 @@ import MediaPlayer
 import Observation
 import SwiftUI
 
+@MainActor
+protocol AppleMusicQueueClient: AnyObject {
+    func addToQueue(song: SongInfo, count: Int, behavior: QueueBehavior) throws
+}
+
 /// Manages adding songs to the Apple Music playback queue.
 @MainActor
 @Observable
@@ -23,21 +28,42 @@ final class AppleMusicQueueService {
         }
     }
 
-    private let systemPlayer = MPMusicPlayerController.systemMusicPlayer
+    @ObservationIgnored private let queueClient: any AppleMusicQueueClient
+    @ObservationIgnored private let userDefaults: UserDefaults
+
+    init(
+        queueClient: any AppleMusicQueueClient = MediaPlayerAppleMusicQueueClient(),
+        userDefaults: UserDefaults = .standard
+    ) {
+        self.queueClient = queueClient
+        self.userDefaults = userDefaults
+    }
 
     /// Adds a song to the queue `count` times, using the user's preferred queue behavior.
     func addToQueue(song: SongInfo, count: Int) throws {
+        let behaviorRawValue = userDefaults.string(forKey: StorageKeys.queueBehavior) ?? QueueBehavior.insertNext.rawValue
+        let behavior = QueueBehavior(rawValue: behaviorRawValue) ?? .insertNext
+
+        try queueClient.addToQueue(song: song, count: count, behavior: behavior)
+    }
+}
+
+@MainActor
+private final class MediaPlayerAppleMusicQueueClient: AppleMusicQueueClient {
+    private let systemPlayer = MPMusicPlayerController.systemMusicPlayer
+
+    func addToQueue(song: SongInfo, count: Int, behavior: QueueBehavior) throws {
         // Find the song in MPMediaLibrary
         let query = MPMediaQuery.songs()
         guard let items = query.items,
               let mediaItem = items.first(where: { $0.persistentID == song.id }) else {
-            throw QueueError.songNotFound
+            throw AppleMusicQueueService.QueueError.songNotFound
         }
 
         // Get the store ID (catalog ID) for the song
         let storeID = mediaItem.playbackStoreID
         guard !storeID.isEmpty else {
-            throw QueueError.noStoreID
+            throw AppleMusicQueueService.QueueError.noStoreID
         }
 
         // Create N copies of the store ID
@@ -45,10 +71,6 @@ final class AppleMusicQueueService {
 
         // Create queue descriptor with store IDs
         let descriptor = MPMusicPlayerStoreQueueDescriptor(storeIDs: storeIDs)
-
-        // Get user's queue behavior preference
-        let behaviorRawValue = UserDefaults.standard.string(forKey: StorageKeys.queueBehavior) ?? QueueBehavior.insertNext.rawValue
-        let behavior = QueueBehavior(rawValue: behaviorRawValue) ?? .insertNext
 
         // Apply the appropriate queue method based on user preference
         switch behavior {
