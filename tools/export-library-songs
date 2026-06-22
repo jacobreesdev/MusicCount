@@ -1,0 +1,365 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DEVICE_NAME="Jacob's iPhone"
+OUTPUT_ROOT="$ROOT_DIR/LibrarySongExports"
+BUNDLE_ID="com.musiccount.app"
+SCHEME="MusicLibraryVerification"
+DERIVED_DATA="$ROOT_DIR/.build/LibrarySongExportDerivedData"
+
+usage() {
+  cat <<'USAGE'
+Usage: tools/export-library-songs [--device "Jacob's iPhone"] [--output LibrarySongExports]
+
+Builds MusicCount in Debug, launches the developer-only Library Song exporter on
+a connected physical iPhone, and copies manifest.json plus artwork back to the Mac.
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --device)
+      DEVICE_NAME="${2:-}"
+      shift 2
+      ;;
+    --output)
+      OUTPUT_ROOT="${2:-}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$DEVICE_NAME" ]]; then
+  echo "Device name cannot be empty." >&2
+  exit 2
+fi
+
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "python3 is required to parse devicectl JSON output." >&2
+  exit 1
+fi
+
+TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/musiccount-library-export.XXXXXX")"
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+DEVICES_JSON="$TMP_DIR/devices.json"
+BUILD_LOG="$TMP_DIR/xcodebuild.log"
+INSTALL_JSON="$TMP_DIR/install.json"
+LAUNCH_JSON="$TMP_DIR/launch.json"
+COPY_JSON="$TMP_DIR/copy.json"
+RUN_ID="$(date +%Y%m%d%H%M%S)-$$"
+
+echo "Looking for connected physical device named '$DEVICE_NAME'..."
+xcrun devicectl list devices --json-output "$DEVICES_JSON" --quiet
+
+read -r DEVICE_ID DEVICE_UDID DEVICE_DISPLAY_NAME < <(python3 - "$DEVICES_JSON" "$DEVICE_NAME" <<'PY'
+import json
+import sys
+
+path, wanted = sys.argv[1], sys.argv[2]
+
+def normalize(value):
+    return (value or "").replace("’", "'").casefold()
+
+with open(path, "r", encoding="utf-8") as handle:
+    payload = json.load(handle)
+
+devices = payload.get("result", {}).get("devices", [])
+candidates = []
+for device in devices:
+    props = device.get("deviceProperties", {})
+    hardware = device.get("hardwareProperties", {})
+    connection = device.get("connectionProperties", {})
+    if normalize(props.get("name")) != normalize(wanted):
+        continue
+    if hardware.get("reality") != "physical":
+        continue
+
+    score = 0
+    if props.get("bootState") == "booted":
+        score += 10
+    if connection.get("transportType") == "wired":
+        score += 8
+    if connection.get("tunnelState") not in (None, "unavailable"):
+        score += 4
+
+    candidates.append((score, connection.get("lastConnectionDate") or "", device))
+
+if not candidates:
+    print("", "", "")
+    sys.exit(0)
+
+candidates.sort(key=lambda row: (row[0], row[1]), reverse=True)
+device = candidates[0][2]
+props = device.get("deviceProperties", {})
+hardware = device.get("hardwareProperties", {})
+print(device.get("identifier", ""), hardware.get("udid", ""), props.get("name", ""))
+PY
+)
+
+if [[ -z "$DEVICE_ID" || -z "$DEVICE_UDID" ]]; then
+  echo "No paired physical device named '$DEVICE_NAME' is available to devicectl." >&2
+  echo "Connect and unlock the iPhone, trust this Mac if prompted, then rerun this command." >&2
+  exit 1
+fi
+
+echo "Using $DEVICE_DISPLAY_NAME ($DEVICE_UDID)."
+mkdir -p "$OUTPUT_ROOT"
+
+echo "Building MusicCount for $DEVICE_DISPLAY_NAME..."
+if ! xcodebuild \
+  -workspace "$ROOT_DIR/MusicLibraryVerification.xcworkspace" \
+  -scheme "$SCHEME" \
+  -configuration Debug \
+  -destination "platform=iOS,id=$DEVICE_UDID" \
+  -derivedDataPath "$DERIVED_DATA" \
+  -allowProvisioningUpdates \
+  build >"$BUILD_LOG" 2>&1; then
+  echo "Provisioning/build failed. Build log: $BUILD_LOG" >&2
+  tail -n 80 "$BUILD_LOG" >&2
+  exit 1
+fi
+
+APP_PATH="$(find "$DERIVED_DATA/Build/Products/Debug-iphoneos" -maxdepth 1 -name 'MusicCount.app' -print -quit)"
+if [[ -z "$APP_PATH" ]]; then
+  echo "Build succeeded, but MusicCount.app was not found in $DERIVED_DATA/Build/Products/Debug-iphoneos." >&2
+  exit 1
+fi
+
+echo "Installing MusicCount..."
+xcrun devicectl device install app \
+  --device "$DEVICE_ID" \
+  --json-output "$INSTALL_JSON" \
+  --quiet \
+  "$APP_PATH"
+
+echo "Launching export mode. If iOS asks for Media Library access, tap Allow on $DEVICE_DISPLAY_NAME."
+echo "Export run id: $RUN_ID"
+xcrun devicectl device process launch \
+  --device "$DEVICE_ID" \
+  --terminate-existing \
+  --json-output "$LAUNCH_JSON" \
+  --timeout 60 \
+  "$BUNDLE_ID" \
+  ExportLibrarySongs \
+  "ExportRunID=$RUN_ID"
+
+EXPORT_DIR="$OUTPUT_ROOT/export-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$EXPORT_DIR"
+
+echo "Polling export status from the app container..."
+POLL_INTERVAL_SECONDS=5
+POLL_TIMEOUT_SECONDS=900
+POLL_STARTED_AT="$(date +%s)"
+STATUS_DIR="$TMP_DIR/status"
+
+while true; do
+  rm -rf "$STATUS_DIR"
+  mkdir -p "$STATUS_DIR"
+
+  set +e
+  xcrun devicectl device copy from \
+    --device "$DEVICE_ID" \
+    --domain-type appDataContainer \
+    --domain-identifier "$BUNDLE_ID" \
+    --source "Documents/MusicCountLibraryExport/status.json" \
+    --destination "$STATUS_DIR/status.json" \
+    --json-output "$COPY_JSON" \
+    --quiet \
+    --timeout 20 >/dev/null 2>&1
+  COPY_STATUS=$?
+  set -e
+
+  NOW="$(date +%s)"
+  ELAPSED_SECONDS=$((NOW - POLL_STARTED_AT))
+  STATUS_PATH="$STATUS_DIR/status.json"
+  STATUS_STATE=""
+
+  if [[ -f "$STATUS_PATH" ]]; then
+    STATUS_STATE="$(python3 - "$STATUS_PATH" "$RUN_ID" <<'PY'
+import json
+import sys
+
+status_path, expected_run_id = sys.argv[1], sys.argv[2]
+with open(status_path, "r", encoding="utf-8") as handle:
+    status = json.load(handle)
+
+if status.get("runID") != expected_run_id:
+    print("stale")
+else:
+    print(status.get("state", "unknown"))
+PY
+)"
+    if [[ "$STATUS_STATE" == "stale" ]]; then
+      python3 - "$STATUS_PATH" "$ELAPSED_SECONDS" "$RUN_ID" <<'PY'
+import json
+import sys
+
+status_path, elapsed, expected_run_id = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(status_path, "r", encoding="utf-8") as handle:
+    status = json.load(handle)
+
+print(f"{elapsed}s | waiting for fresh status.json | saw runID={status.get('runID')} expected={expected_run_id}")
+PY
+    else
+      python3 - "$STATUS_PATH" "$ELAPSED_SECONDS" <<'PY'
+import json
+import sys
+
+status_path, elapsed = sys.argv[1], sys.argv[2]
+with open(status_path, "r", encoding="utf-8") as handle:
+    status = json.load(handle)
+
+parts = [
+    f"{elapsed}s",
+    f"state={status.get('state', 'unknown')}",
+    status.get("message", ""),
+]
+
+if status.get("songCount") is not None:
+    parts.append(f"songs={status['songCount']}")
+if status.get("songsWithPlayCounts") is not None:
+    parts.append(f"playCounts={status['songsWithPlayCounts']}")
+if status.get("songsWithArtwork") is not None:
+    parts.append(f"artwork={status['songsWithArtwork']}")
+
+print(" | ".join(part for part in parts if part))
+PY
+    fi
+  else
+    echo "${ELAPSED_SECONDS}s | waiting for status.json | copyStatus=$COPY_STATUS"
+  fi
+
+  if [[ "$STATUS_STATE" == "failed" ]]; then
+    echo "Copying failed export details..."
+    rm -rf "$EXPORT_DIR"
+    mkdir -p "$EXPORT_DIR"
+    xcrun devicectl device copy from \
+      --device "$DEVICE_ID" \
+      --domain-type appDataContainer \
+      --domain-identifier "$BUNDLE_ID" \
+      --source "Documents/MusicCountLibraryExport" \
+      --destination "$EXPORT_DIR" \
+      --remove-existing-content true \
+      --json-output "$COPY_JSON" \
+      --quiet \
+      --timeout 600 || true
+
+    ERROR_PATH="$(find "$EXPORT_DIR" -name export-error.json -print -quit)"
+    if [[ -n "$ERROR_PATH" ]]; then
+    python3 - "$ERROR_PATH" <<'PY' >&2
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as handle:
+    error = json.load(handle).get("error", "Unknown export error")
+
+print(f"Export failed on device: {error}")
+PY
+    else
+      echo "Export failed on device; no export-error.json was copied." >&2
+    fi
+    exit 1
+  fi
+
+  if [[ "$STATUS_STATE" == "complete" ]]; then
+    echo "Copying completed export..."
+    rm -rf "$EXPORT_DIR"
+    mkdir -p "$EXPORT_DIR/artwork"
+
+    xcrun devicectl device copy from \
+      --device "$DEVICE_ID" \
+      --domain-type appDataContainer \
+      --domain-identifier "$BUNDLE_ID" \
+      --source "Documents/MusicCountLibraryExport/status.json" \
+      --destination "$EXPORT_DIR/status.json" \
+      --json-output "$COPY_JSON" \
+      --quiet \
+      --timeout 60
+
+    xcrun devicectl device copy from \
+      --device "$DEVICE_ID" \
+      --domain-type appDataContainer \
+      --domain-identifier "$BUNDLE_ID" \
+      --source "Documents/MusicCountLibraryExport/manifest.json" \
+      --destination "$EXPORT_DIR/manifest.json" \
+      --json-output "$COPY_JSON" \
+      --quiet \
+      --timeout 60
+
+    echo "Copying artwork files..."
+    ARTWORK_STAGE="$TMP_DIR/artwork-copy"
+    rm -rf "$ARTWORK_STAGE"
+    mkdir -p "$ARTWORK_STAGE"
+
+    xcrun devicectl device copy from \
+      --device "$DEVICE_ID" \
+      --domain-type appDataContainer \
+      --domain-identifier "$BUNDLE_ID" \
+      --source "Documents/MusicCountLibraryExport/artwork" \
+      --destination "$ARTWORK_STAGE" \
+      --remove-existing-content true \
+      --json-output "$COPY_JSON" \
+      --quiet \
+      --timeout 600
+    ditto "$ARTWORK_STAGE" "$EXPORT_DIR/artwork"
+    MANIFEST_PATH="$EXPORT_DIR/manifest.json"
+    break
+  fi
+
+  if [[ "$ELAPSED_SECONDS" -ge "$POLL_TIMEOUT_SECONDS" ]]; then
+    echo "Timed out waiting for export completion after ${POLL_TIMEOUT_SECONDS}s." >&2
+    echo "Last copy details: $COPY_JSON" >&2
+    exit 1
+  fi
+
+  sleep "$POLL_INTERVAL_SECONDS"
+done
+
+if [[ -z "${MANIFEST_PATH:-}" ]]; then
+  echo "Export reported complete but manifest.json was not copied." >&2
+  exit 1
+fi
+
+python3 - "$MANIFEST_PATH" <<'PY'
+import json
+import pathlib
+import sys
+
+manifest_path = pathlib.Path(sys.argv[1])
+with manifest_path.open("r", encoding="utf-8") as handle:
+    manifest = json.load(handle)
+
+songs = manifest.get("songs", [])
+with_play_counts = sum(1 for song in songs if song.get("playCount", 0) > 0)
+with_artwork = sum(1 for song in songs if song.get("hasArtwork"))
+local_artwork = list((manifest_path.parent / "artwork").glob("*.png"))
+
+if not songs:
+    print("Export copied, but it contains no readable Library Songs.", file=sys.stderr)
+    sys.exit(1)
+
+if len(local_artwork) != with_artwork:
+    print(
+        f"Expected {with_artwork} artwork files, but copied {len(local_artwork)}.",
+        file=sys.stderr
+    )
+    sys.exit(1)
+
+print(f"Exported {len(songs)} Library Songs.")
+print(f"Songs with Play Counts: {with_play_counts}")
+print(f"Songs with artwork: {with_artwork}")
+print(f"Artwork files copied: {len(local_artwork)}")
+print(f"Manifest: {manifest_path}")
+print(f"Folder: {manifest_path.parent}")
+PY

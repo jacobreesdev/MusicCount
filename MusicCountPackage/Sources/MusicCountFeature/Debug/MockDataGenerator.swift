@@ -10,6 +10,11 @@ final class MockDataGenerator {
     /// Generate complete mock library data.
     /// - Returns: Array of SongInfo objects ready for display
     func generateMockLibrary() async -> [SongInfo] {
+        if let exportedSongs = LibrarySongExportMockDataLoader.loadSongsFromLaunchConfiguration() {
+            NSLog("Generated \(exportedSongs.count) mock songs from exported Library Song manifest")
+            return exportedSongs
+        }
+
         if let exportedSongs = LibraryXMLMockDataLoader.loadSongs() {
             NSLog("Generated \(exportedSongs.count) mock songs from Library.xml")
             return exportedSongs
