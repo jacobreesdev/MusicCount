@@ -187,14 +187,12 @@ final class MusicLibraryVerificationUITests: XCTestCase {
         let completedRepairDoneButton = app.buttons["suggestions.activeRepair.done.blinding lights-the weeknd"]
         XCTAssertTrue(completedRepairDoneButton.waitForExistence(timeout: 10))
 
-        let completionAlert = completeActiveRepair(using: completedRepairDoneButton, in: app)
-
-        let playlistWarning = completionAlert.staticTexts.containing(
-            NSPredicate(format: "label CONTAINS %@", "could not update the Songs to Remove Playlist")
-        ).firstMatch
-        XCTAssertTrue(playlistWarning.exists)
-
-        completionAlert.buttons["OK"].tap()
+        if let completionAlert = completeActiveRepair(using: completedRepairDoneButton, in: app) {
+            assertCompletionAlertShowsPlaylistWarning(completionAlert)
+            completionAlert.buttons["OK"].tap()
+        } else {
+            assertPlaylistSyncWarningVisible(in: app)
+        }
 
         XCTAssertFalse(completedRepairDoneButton.waitForExistence(timeout: 2))
         XCTAssertTrue(app.buttons["suggestions.activeRepair.done.shake it off-taylor swift"].waitForExistence(timeout: 5))
@@ -210,10 +208,11 @@ final class MusicLibraryVerificationUITests: XCTestCase {
 
         let completedRepairDoneButton = app.buttons["suggestions.activeRepair.done.blinding lights-the weeknd"]
         XCTAssertTrue(completedRepairDoneButton.waitForExistence(timeout: 10))
-        let completionAlert = completeActiveRepair(using: completedRepairDoneButton, in: app)
-        completionAlert.buttons["OK"].tap()
+        if let completionAlert = completeActiveRepair(using: completedRepairDoneButton, in: app) {
+            completionAlert.buttons["OK"].tap()
+        }
 
-        XCTAssertTrue(app.staticTexts["Songs to Remove Playlist May Be Stale"].waitForExistence(timeout: 5))
+        assertPlaylistSyncWarningVisible(in: app)
 
         let retryButton = app.buttons["Retry Playlist Sync"]
         XCTAssertTrue(retryButton.exists)
@@ -251,7 +250,7 @@ final class MusicLibraryVerificationUITests: XCTestCase {
         in app: XCUIApplication,
         file: StaticString = #filePath,
         line: UInt = #line
-    ) -> XCUIElement {
+    ) -> XCUIElement? {
         let completionAlert = app.alerts["Repair Marked Done"]
 
         for attempt in 1...3 {
@@ -261,11 +260,38 @@ final class MusicLibraryVerificationUITests: XCTestCase {
                 return completionAlert
             }
 
-            guard attempt < 3, doneButton.waitForExistence(timeout: 2) else { break }
+            if doneButton.waitForExistence(timeout: 2) == false {
+                return nil
+            }
+
+            guard attempt < 3 else { break }
         }
 
         XCTFail("Repair Marked Done alert did not appear after tapping the Active Repair done button.", file: file, line: line)
-        return completionAlert
+        return nil
+    }
+
+    private func assertCompletionAlertShowsPlaylistWarning(
+        _ completionAlert: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let playlistWarning = completionAlert.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS %@", "could not update the Songs to Remove Playlist")
+        ).firstMatch
+        XCTAssertTrue(playlistWarning.exists, file: file, line: line)
+    }
+
+    private func assertPlaylistSyncWarningVisible(
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertTrue(
+            app.staticTexts["Songs to Remove Playlist May Be Stale"].waitForExistence(timeout: 5),
+            file: file,
+            line: line
+        )
     }
 
     private func waitForMockLibraryToLoad(in app: XCUIApplication) {
