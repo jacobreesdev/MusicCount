@@ -84,6 +84,34 @@ Built to Apple's Human Interface Guidelines. Every button has proper labels and 
 
 Overkill for a side project? Maybe. But I wanted to learn how to test properly, not just ship something. Built the test suite with Swift's modern testing framework. Coverage includes: service tests for grouping logic, dismissal persistence, and case insensitivity; queue behaviour tests for insertion modes and edge cases; model tests for validation and aggregation; and sort tests for all seven algorithms. Production uses real library data, while tests and UI development use a mock service with deterministic random generation.
 
+### Continuous Integration
+
+Pull requests to `master`, pushes to `master`, and manual workflow dispatches run `.github/workflows/ci.yml`. The required CI check is `MusicCount simulator tests`.
+
+The workflow intentionally uses the checked-in Xcode workspace and test plan rather than host SwiftPM:
+
+```sh
+xcodebuild test \
+  -workspace MusicLibraryVerification.xcworkspace \
+  -scheme MusicLibraryVerification \
+  -testPlan MusicLibraryVerification \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest'
+```
+
+`MusicCount/MusicLibraryVerification.xctestplan` covers both `MusicCountFeatureTests` from `MusicCountPackage` and `MusicCountUITests` from the app project. This matters because package source imports UIKit, so raw host `swift test` can fail before test discovery on macOS even when the package passes through the simulator harness.
+
+As of 2026-06-22, GitHub's `macos-26` runner image is generally available and includes Xcode 26.5 plus iPhone 17 Pro simulators. CI pins `runs-on: macos-26` and selects `/Applications/Xcode_26.5.app/Contents/Developer` explicitly so default-image changes do not silently move the project to another Xcode.
+
+The workflow keeps permissions to read-only repository contents, cancels superseded runs on the same ref, uploads the Xcode result bundle and build log on failure, and does not cache DerivedData or SwiftPM artifacts yet. The project has no external Swift package dependencies today, and DerivedData caches are easy to make stale across Xcode image updates; add caching only after CI timings show a real need.
+
+Deployment is intentionally not enabled. A TestFlight or App Store workflow should be added separately once the repository has App Store Connect API credentials, signing certificates or automatic signing set up for CI, provisioning profiles where needed, and a documented release approval path.
+
+### Repository Hygiene
+
+GitHub Issues are the tracker for bugs, features, maintenance work, and planning slices. The repository includes issue forms, a pull request template, CODEOWNERS, and Dependabot version updates for GitHub Actions and Swift Package Manager manifests.
+
+Repository settings should keep secret scanning and push protection enabled. The `master` branch is protected by a repository ruleset that requires pull requests, one approving review, resolved conversations, the `MusicCount simulator tests` status check, and blocks branch deletion and force pushes.
+
 ---
 
 ## Tech Stack

@@ -1,0 +1,86 @@
+name: MusicCount CI
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  WORKSPACE: MusicLibraryVerification.xcworkspace
+  SCHEME: MusicLibraryVerification
+  TEST_PLAN: MusicLibraryVerification
+  DESTINATION: platform=iOS Simulator,name=iPhone 17 Pro,OS=latest
+  DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
+  DERIVED_DATA_PATH: .build/ci-derived-data
+  RESULT_BUNDLE_PATH: .build/MusicLibraryVerification.xcresult
+  XCODEBUILD_LOG: .build/ci-xcodebuild.log
+
+jobs:
+  simulator-tests:
+    name: MusicCount simulator tests
+    runs-on: macos-26
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Select pinned Xcode
+        run: |
+          if [[ ! -d "$DEVELOPER_DIR" ]]; then
+            echo "::error::Expected Xcode at $DEVELOPER_DIR"
+            find /Applications -maxdepth 1 -name 'Xcode*.app' -print
+            exit 1
+          fi
+
+          sudo xcode-select -s "$DEVELOPER_DIR"
+          xcodebuild -version
+          xcodebuild -showsdks | grep iphonesimulator
+
+      - name: Show simulator destinations
+        run: |
+          xcodebuild -showdestinations \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME"
+
+      - name: Test app and package on iOS simulator
+        run: |
+          set -o pipefail
+          mkdir -p "$(dirname "$XCODEBUILD_LOG")"
+          rm -rf "$RESULT_BUNDLE_PATH"
+
+          xcodebuild test \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -testPlan "$TEST_PLAN" \
+            -destination "$DESTINATION" \
+            -derivedDataPath "$DERIVED_DATA_PATH" \
+            -resultBundlePath "$RESULT_BUNDLE_PATH" \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee "$XCODEBUILD_LOG"
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: musiccount-ci-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .build/ci-xcodebuild.log
+            .build/MusicLibraryVerification.xcresult
+          if-no-files-found: ignore
+          retention-days: 7

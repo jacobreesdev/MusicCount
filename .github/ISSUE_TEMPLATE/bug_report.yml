@@ -1,0 +1,45 @@
+name: Bug report
+description: Report behavior that is broken or regressed.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction target
+      description: Steps, fixture, failing test idea, simulator flow, logs, screenshot, crash report, or missing evidence question.
+      placeholder: |
+        1. Launch with ...
+        2. Tap ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Device or simulator, iOS version, Xcode version, branch or app version.
+    validations:
+      required: false
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification idea
+      description: The smallest local check that should fail before the fix and pass after it.
+    validations:
+      required: false

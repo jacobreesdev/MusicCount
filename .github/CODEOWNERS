@@ -1,0 +1,12 @@
+# Default ownership for a single-maintainer repository.
+* @jacobreesdev
+
+# Keep CI and repository automation changes on the maintainer's radar.
+/.github/ @jacobreesdev
+
+# Xcode project, workspace, package, and verification surfaces.
+/MusicCount.xcodeproj/ @jacobreesdev
+/MusicLibraryVerification.xcworkspace/ @jacobreesdev
+/MusicCount/MusicLibraryVerification.xctestplan @jacobreesdev
+/MusicCountPackage/ @jacobreesdev
+/MusicCountUITests/ @jacobreesdev
