@@ -157,19 +157,7 @@ struct SuggestionsTabView: View {
     }
 
     private func loadingView(title: String, message: String) -> some View {
-        VStack(spacing: 20) {
-            ProgressView()
-                .scaleEffect(1.5)
-
-            Text(title)
-                .font(.title2.weight(.semibold))
-
-            Text(message)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal)
-        }
-        .padding()
+        MusicCountLoadingStateView(title: title, message: message)
     }
 
     private func unavailableView(
@@ -178,20 +166,12 @@ struct SuggestionsTabView: View {
         systemImage: String,
         color: Color
     ) -> some View {
-        VStack(spacing: 20) {
-            Image(systemName: systemImage)
-                .font(.system(size: 80))
-                .foregroundStyle(color)
-
-            Text(title)
-                .font(.title2.weight(.semibold))
-
-            Text(message)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal)
-        }
-        .padding()
+        MusicCountUnavailableStateView(
+            title: title,
+            message: message,
+            systemImage: systemImage,
+            color: color
+        )
     }
 
     private var repairWorkList: some View {
@@ -620,9 +600,19 @@ enum SuggestionSortOption: String, CaseIterable, Identifiable, Sendable {
         )
 }
 
+#Preview("Suggestions - Access Restricted") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            authorizationState: .restricted,
+            loadingState: .idle,
+            suggestions: []
+        )
+}
+
 #Preview("Active Repairs - Queued") {
     SuggestionsTabView()
         .musicCountPreviewEnvironment(
+            suggestions: [],
             activeRepairs: [MusicCountPreviewData.activeRepairs[0]]
         )
 }
@@ -630,6 +620,7 @@ enum SuggestionSortOption: String, CaseIterable, Identifiable, Sendable {
 #Preview("Active Repairs - Multiple") {
     SuggestionsTabView()
         .musicCountPreviewEnvironment(
+            suggestions: [],
             activeRepairs: MusicCountPreviewData.activeRepairs
         )
 }
@@ -642,34 +633,12 @@ enum SuggestionSortOption: String, CaseIterable, Identifiable, Sendable {
         )
 }
 
-#Preview("Songs to Remove Playlist - Not Created") {
-    SuggestionsTabView()
-        .musicCountPreviewEnvironment(
-            loadingState: .loaded([]),
-            suggestions: []
-        )
-}
-
-#Preview("Songs to Remove Playlist - Create Needed") {
-    SuggestionsTabView()
-        .musicCountPreviewEnvironment(
-            activeRepairs: [MusicCountPreviewData.activeRepairs[0]]
-        )
-}
-
 #Preview("Songs to Remove Playlist - Sync Failure") {
     SuggestionsTabView()
         .musicCountPreviewEnvironment(
+            suggestions: [],
             activeRepairs: MusicCountPreviewData.activeRepairs,
             playlistSyncProblem: "MusicCount could not update its app-owned Songs to Remove Playlist."
-        )
-}
-
-#Preview("Songs to Remove Playlist - Empty After Completion") {
-    SuggestionsTabView()
-        .musicCountPreviewEnvironment(
-            suggestions: [MusicCountPreviewData.blindingLightsSuggestion],
-            completedRepairs: [MusicCountPreviewData.completedRepair]
         )
 }
 #endif

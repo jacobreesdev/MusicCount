@@ -35,56 +35,28 @@ struct LibraryTabView: View {
     // MARK: - Authorization Views
 
     private var unauthorizedView: some View {
-        VStack(spacing: 20) {
-            ProgressView()
-                .scaleEffect(1.5)
-
-            Text("Requesting Permission")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            Text("Please allow access to your music library when prompted.")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal)
-        }
-        .padding()
+        MusicCountLoadingStateView(
+            title: "Requesting Permission",
+            message: "Please allow access to your music library when prompted."
+        )
     }
 
     private var deniedView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 80))
-                .foregroundStyle(.red)
-
-            Text("Access Denied")
-                .font(.title2)
-                .fontWeight(.semibold)
-
-            Text("Music library access was denied. Please enable it in Settings > Privacy & Security > Media & Apple Music.")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal)
-        }
-        .padding()
+        MusicCountUnavailableStateView(
+            title: "Access Denied",
+            message: "Music library access was denied. Please enable it in Settings > Privacy & Security > Media & Apple Music.",
+            systemImage: "exclamationmark.triangle",
+            color: .red
+        )
     }
 
     private var restrictedView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "lock.shield")
-                .font(.system(size: 80))
-                .foregroundStyle(.orange)
-
-            Text("Access Restricted")
-                .font(.title2)
-                .fontWeight(.semibold)
-
-            Text("Music library access is restricted by device policies or parental controls.")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal)
-        }
-        .padding()
+        MusicCountUnavailableStateView(
+            title: "Access Restricted",
+            message: "Music library access is restricted by device policies or parental controls.",
+            systemImage: "lock.shield",
+            color: .orange
+        )
     }
 
     private var authorizedView: some View {
@@ -103,39 +75,28 @@ struct LibraryTabView: View {
     // MARK: - Loading States
 
     private var loadingView: some View {
-        VStack(spacing: 20) {
-            ProgressView()
-                .scaleEffect(1.5)
-
-            Text("Loading Music Library...")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
+        MusicCountLoadingStateView(
+            title: "Loading Music Library",
+            message: "Finding Library Songs for browsing and manual queueing."
+        )
     }
 
     private func errorView(message: String) -> some View {
-        VStack(spacing: 20) {
-            Image(systemName: "exclamationmark.circle")
-                .font(.system(size: 80))
-                .foregroundStyle(.orange)
-
-            Text("No Songs Found")
-                .font(.title2)
-                .fontWeight(.semibold)
-
-            Text(message)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal)
-
-            Button("Try Again") {
+        MusicCountUnavailableStateView(
+            title: "Library Unavailable",
+            message: message,
+            systemImage: "exclamationmark.circle",
+            color: .orange
+        ) {
+            Button {
                 Task {
                     await service.loadMusicLibrary()
                 }
+            } label: {
+                Label("Try Again", systemImage: "arrow.clockwise")
             }
             .buttonStyle(.bordered)
         }
-        .padding()
     }
 
     private func libraryView(songs: [SongInfo]) -> some View {
@@ -276,6 +237,13 @@ struct LibraryTabView: View {
 }
 
 #if DEBUG
+#Preview("Library - Loading") {
+    LibraryTabView()
+        .musicCountPreviewEnvironment(
+            loadingState: .loading
+        )
+}
+
 #Preview("Library - Populated") {
     LibraryTabView()
         .musicCountPreviewEnvironment()
@@ -301,6 +269,22 @@ struct LibraryTabView: View {
     LibraryTabView()
         .musicCountPreviewEnvironment(
             loadingState: .error("MusicCount could not load the preview music library.")
+        )
+}
+
+#Preview("Library - Access Denied") {
+    LibraryTabView()
+        .musicCountPreviewEnvironment(
+            authorizationState: .denied,
+            loadingState: .idle
+        )
+}
+
+#Preview("Library - Access Restricted") {
+    LibraryTabView()
+        .musicCountPreviewEnvironment(
+            authorizationState: .restricted,
+            loadingState: .idle
         )
 }
 #endif
