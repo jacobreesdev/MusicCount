@@ -27,12 +27,88 @@ env:
   DESTINATION: platform=iOS Simulator,name=iPhone 17 Pro,OS=latest
   DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
   DERIVED_DATA_PATH: .build/ci-derived-data
-  RESULT_BUNDLE_PATH: .build/MusicLibraryVerification.xcresult
-  XCODEBUILD_LOG: .build/ci-xcodebuild.log
+  PR_RESULT_BUNDLE_PATH: .build/MusicCountPRGate.xcresult
+  PR_XCODEBUILD_LOG: .build/ci-pr-gate.log
+  FULL_RESULT_BUNDLE_PATH: .build/MusicCountFullVerification.xcresult
+  FULL_XCODEBUILD_LOG: .build/ci-full-verification.log
 
 jobs:
   simulator-tests:
     name: MusicCount simulator tests
+    runs-on: macos-26
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Select pinned Xcode
+        run: |
+          if [[ ! -d "$DEVELOPER_DIR" ]]; then
+            echo "::error::Expected Xcode at $DEVELOPER_DIR"
+            find /Applications -maxdepth 1 -name 'Xcode*.app' -print
+            exit 1
+          fi
+
+          sudo xcode-select -s "$DEVELOPER_DIR"
+          xcodebuild -version
+          xcodebuild -showsdks | grep iphonesimulator
+
+      - name: Build app and tests for iOS simulator
+        run: |
+          set -o pipefail
+          mkdir -p "$(dirname "$PR_XCODEBUILD_LOG")"
+
+          pr_tests=(
+            "-only-testing:MusicCountFeatureTests"
+            "-only-testing:MusicCountUITests/MusicLibraryVerificationUITests/testMockDataLaunchShowsLibraryAndSuggestions"
+          )
+
+          xcodebuild build-for-testing \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -testPlan "$TEST_PLAN" \
+            -destination "$DESTINATION" \
+            -derivedDataPath "$DERIVED_DATA_PATH" \
+            "${pr_tests[@]}" \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee "$PR_XCODEBUILD_LOG"
+
+      - name: Test package and UI smoke on iOS simulator
+        run: |
+          set -o pipefail
+          rm -rf "$PR_RESULT_BUNDLE_PATH"
+
+          pr_tests=(
+            "-only-testing:MusicCountFeatureTests"
+            "-only-testing:MusicCountUITests/MusicLibraryVerificationUITests/testMockDataLaunchShowsLibraryAndSuggestions"
+          )
+
+          xcodebuild test-without-building \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -testPlan "$TEST_PLAN" \
+            -destination "$DESTINATION" \
+            -derivedDataPath "$DERIVED_DATA_PATH" \
+            -resultBundlePath "$PR_RESULT_BUNDLE_PATH" \
+            "${pr_tests[@]}" \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee -a "$PR_XCODEBUILD_LOG"
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: musiccount-ci-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .build/ci-pr-gate.log
+            .build/MusicCountPRGate.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
+
+  full-verification:
+    name: Full MusicCount UI verification
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: macos-26
     timeout-minutes: 35
 
@@ -52,17 +128,11 @@ jobs:
           xcodebuild -version
           xcodebuild -showsdks | grep iphonesimulator
 
-      - name: Show simulator destinations
-        run: |
-          xcodebuild -showdestinations \
-            -workspace "$WORKSPACE" \
-            -scheme "$SCHEME"
-
-      - name: Test app and package on iOS simulator
+      - name: Test full verification plan on iOS simulator
         run: |
           set -o pipefail
-          mkdir -p "$(dirname "$XCODEBUILD_LOG")"
-          rm -rf "$RESULT_BUNDLE_PATH"
+          mkdir -p "$(dirname "$FULL_XCODEBUILD_LOG")"
+          rm -rf "$FULL_RESULT_BUNDLE_PATH"
 
           xcodebuild test \
             -workspace "$WORKSPACE" \
@@ -70,17 +140,17 @@ jobs:
             -testPlan "$TEST_PLAN" \
             -destination "$DESTINATION" \
             -derivedDataPath "$DERIVED_DATA_PATH" \
-            -resultBundlePath "$RESULT_BUNDLE_PATH" \
+            -resultBundlePath "$FULL_RESULT_BUNDLE_PATH" \
             CODE_SIGNING_ALLOWED=NO \
-            | tee "$XCODEBUILD_LOG"
+            | tee "$FULL_XCODEBUILD_LOG"
 
       - name: Upload failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: musiccount-ci-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          name: musiccount-full-verification-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            .build/ci-xcodebuild.log
-            .build/MusicLibraryVerification.xcresult
+            .build/ci-full-verification.log
+            .build/MusicCountFullVerification.xcresult
           if-no-files-found: ignore
           retention-days: 7

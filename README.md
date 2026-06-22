@@ -88,17 +88,29 @@ Overkill for a side project? Maybe. But I wanted to learn how to test properly, 
 
 Pull requests to `master`, pushes to `master`, and manual workflow dispatches run `.github/workflows/ci.yml`. The required CI check is `MusicCount simulator tests`.
 
-The workflow intentionally uses the checked-in Xcode workspace and test plan rather than host SwiftPM:
+The required check intentionally uses the checked-in Xcode workspace and test plan rather than host SwiftPM. It builds the app and test bundle for an iOS simulator, then runs the package tests plus one deterministic app-launch UI smoke test:
 
 ```sh
-xcodebuild test \
+xcodebuild build-for-testing \
   -workspace MusicLibraryVerification.xcworkspace \
   -scheme MusicLibraryVerification \
   -testPlan MusicLibraryVerification \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest'
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+  -only-testing:MusicCountFeatureTests \
+  -only-testing:MusicCountUITests/MusicLibraryVerificationUITests/testMockDataLaunchShowsLibraryAndSuggestions
+
+xcodebuild test-without-building \
+  -workspace MusicLibraryVerification.xcworkspace \
+  -scheme MusicLibraryVerification \
+  -testPlan MusicLibraryVerification \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+  -only-testing:MusicCountFeatureTests \
+  -only-testing:MusicCountUITests/MusicLibraryVerificationUITests/testMockDataLaunchShowsLibraryAndSuggestions
 ```
 
 `MusicCount/MusicLibraryVerification.xctestplan` covers both `MusicCountFeatureTests` from `MusicCountPackage` and `MusicCountUITests` from the app project. This matters because package source imports UIKit, so raw host `swift test` can fail before test discovery on macOS even when the package passes through the simulator harness.
+
+Manual workflow dispatch also runs `Full MusicCount UI verification`, which executes the full verification test plan on the same simulator. That deeper suite is intentionally manual because hosted iOS UI tests are slower and more timing-sensitive than the package and launch-smoke gate.
 
 As of 2026-06-22, GitHub's `macos-26` runner image is generally available and includes Xcode 26.5 plus iPhone 17 Pro simulators. CI pins `runs-on: macos-26` and selects `/Applications/Xcode_26.5.app/Contents/Developer` explicitly so default-image changes do not silently move the project to another Xcode.
 
