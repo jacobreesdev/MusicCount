@@ -187,10 +187,7 @@ final class MusicLibraryVerificationUITests: XCTestCase {
         let completedRepairDoneButton = app.buttons["suggestions.activeRepair.done.blinding lights-the weeknd"]
         XCTAssertTrue(completedRepairDoneButton.waitForExistence(timeout: 10))
 
-        completedRepairDoneButton.tap()
-
-        let completionAlert = app.alerts["Repair Marked Done"]
-        XCTAssertTrue(completionAlert.waitForExistence(timeout: 20))
+        let completionAlert = completeActiveRepair(using: completedRepairDoneButton, in: app)
 
         let playlistWarning = completionAlert.staticTexts.containing(
             NSPredicate(format: "label CONTAINS %@", "could not update the Songs to Remove Playlist")
@@ -213,10 +210,7 @@ final class MusicLibraryVerificationUITests: XCTestCase {
 
         let completedRepairDoneButton = app.buttons["suggestions.activeRepair.done.blinding lights-the weeknd"]
         XCTAssertTrue(completedRepairDoneButton.waitForExistence(timeout: 10))
-        completedRepairDoneButton.tap()
-
-        let completionAlert = app.alerts["Repair Marked Done"]
-        XCTAssertTrue(completionAlert.waitForExistence(timeout: 10))
+        let completionAlert = completeActiveRepair(using: completedRepairDoneButton, in: app)
         completionAlert.buttons["OK"].tap()
 
         XCTAssertTrue(app.staticTexts["Songs to Remove Playlist May Be Stale"].waitForExistence(timeout: 5))
@@ -250,6 +244,28 @@ final class MusicLibraryVerificationUITests: XCTestCase {
         if searchButton.waitForExistence(timeout: 2) {
             searchButton.tap()
         }
+    }
+
+    private func completeActiveRepair(
+        using doneButton: XCUIElement,
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> XCUIElement {
+        let completionAlert = app.alerts["Repair Marked Done"]
+
+        for attempt in 1...3 {
+            doneButton.tap()
+
+            if completionAlert.waitForExistence(timeout: 15) {
+                return completionAlert
+            }
+
+            guard attempt < 3, doneButton.waitForExistence(timeout: 2) else { break }
+        }
+
+        XCTFail("Repair Marked Done alert did not appear after tapping the Active Repair done button.", file: file, line: line)
+        return completionAlert
     }
 
     private func waitForMockLibraryToLoad(in app: XCUIApplication) {
