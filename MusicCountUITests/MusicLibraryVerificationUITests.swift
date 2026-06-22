@@ -2,6 +2,7 @@ import XCTest
 
 final class MusicLibraryVerificationUITests: XCTestCase {
     private let mockLibraryAnchorTitle = "hate that i made you love me"
+    private let longLibrarySongTitle = "hate that i made you love me (ari lyric draft from bed)"
     private let suggestionSearchQuery = "begged"
 
     override func setUpWithError() throws {
@@ -135,6 +136,45 @@ final class MusicLibraryVerificationUITests: XCTestCase {
     }
 
     @MainActor
+    func testLongLibrarySongTextWrapsInSuggestionsAndLibrary() throws {
+        let app = XCUIApplication()
+        app.launchArguments.append(contentsOf: ["-MockData", "-ResetRepairState"])
+        app.launch()
+
+        waitForMockSuggestionsToLoad(in: app)
+
+        let suggestionsSearchField = app.searchFields["Search suggestions"]
+        suggestionsSearchField.tap()
+        suggestionsSearchField.typeText(mockLibraryAnchorTitle)
+
+        let suggestionTitle = app.staticTexts[longLibrarySongTitle].firstMatch
+        XCTAssertTrue(suggestionTitle.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(
+            suggestionTitle.frame.height,
+            singleLineTitleHeight,
+            "Long Library Song text should wrap in Suggestions instead of staying on one line."
+        )
+
+        app.terminate()
+        app.launch()
+
+        app.tabBars.buttons["Library"].tap()
+        waitForMockLibraryToLoad(in: app)
+
+        let librarySearchField = app.searchFields["Search songs"]
+        librarySearchField.tap()
+        librarySearchField.typeText(longLibrarySongTitle)
+
+        let libraryTitle = app.staticTexts[longLibrarySongTitle].firstMatch
+        XCTAssertTrue(libraryTitle.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(
+            libraryTitle.frame.height,
+            singleLineTitleHeight,
+            "Long Library Song text should wrap in Library instead of staying on one line."
+        )
+    }
+
+    @MainActor
     func testMockActiveRepairCanBeMarkedDone() throws {
         let app = XCUIApplication()
         app.launchArguments.append(contentsOf: ["-MockData", "-MockActiveRepairs"])
@@ -215,5 +255,9 @@ final class MusicLibraryVerificationUITests: XCTestCase {
             app.searchFields["Search suggestions"].waitForExistence(timeout: 20),
             "MusicCount should launch into Suggestions as the primary repair surface."
         )
+    }
+
+    private var singleLineTitleHeight: CGFloat {
+        28
     }
 }

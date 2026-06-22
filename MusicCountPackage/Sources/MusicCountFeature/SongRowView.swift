@@ -18,12 +18,14 @@ struct SongRowView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(song.title)
                     .font(.headline)
-                    .lineLimit(1)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Text(song.artist)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: 4) {
                     Image(systemName: "play.circle.fill")
@@ -32,8 +34,8 @@ struct SongRowView: View {
                 .font(.caption)
                 .foregroundStyle(song.playCount > 0 ? .blue : .secondary)
             }
-
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
 
             // Right Side: Duration or Badge
             ZStack {
@@ -50,6 +52,7 @@ struct SongRowView: View {
                         .transition(.scale.combined(with: .opacity))
                 }
             }
+            .frame(minWidth: 44, alignment: .trailing)
             .animation(.easeInOut(duration: 0.3), value: selectionSlot)
         }
         .padding(.vertical, 6)
