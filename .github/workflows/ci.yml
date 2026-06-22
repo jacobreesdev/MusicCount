@@ -54,6 +54,22 @@ jobs:
           xcodebuild -version
           xcodebuild -showsdks | grep iphonesimulator
 
+      - name: Prepare simulator destination
+        run: |
+          device_type_id="$(
+            xcrun simctl list devicetypes --json \
+              | ruby -rjson -e 'types = JSON.parse(STDIN.read).fetch("devicetypes"); type = types.find { |item| item["name"] == "iPhone 17 Pro" }; abort("iPhone 17 Pro device type unavailable") unless type; puts type["identifier"]'
+          )"
+          runtime_id="$(
+            xcrun simctl list runtimes --json \
+              | ruby -rjson -e 'device_type_id = ARGV.fetch(0); runtimes = JSON.parse(STDIN.read).fetch("runtimes"); runtime = runtimes.select { |item| item["platform"] == "iOS" && item["isAvailable"] && item.fetch("supportedDeviceTypes", []).any? { |type| type["identifier"] == device_type_id } }.max_by { |item| item["version"].split(".").map(&:to_i) }; abort("No available iOS runtime supports #{device_type_id}") unless runtime; puts runtime["identifier"]' "$device_type_id"
+          )"
+          simulator_id="$(xcrun simctl create "MusicCount CI iPhone 17 Pro" "$device_type_id" "$runtime_id")"
+
+          echo "DESTINATION=platform=iOS Simulator,id=$simulator_id" >> "$GITHUB_ENV"
+          xcrun simctl boot "$simulator_id" || true
+          xcrun simctl bootstatus "$simulator_id" -b
+
       - name: Build app and tests for iOS simulator
         run: |
           set -o pipefail
@@ -127,6 +143,22 @@ jobs:
           sudo xcode-select -s "$DEVELOPER_DIR"
           xcodebuild -version
           xcodebuild -showsdks | grep iphonesimulator
+
+      - name: Prepare simulator destination
+        run: |
+          device_type_id="$(
+            xcrun simctl list devicetypes --json \
+              | ruby -rjson -e 'types = JSON.parse(STDIN.read).fetch("devicetypes"); type = types.find { |item| item["name"] == "iPhone 17 Pro" }; abort("iPhone 17 Pro device type unavailable") unless type; puts type["identifier"]'
+          )"
+          runtime_id="$(
+            xcrun simctl list runtimes --json \
+              | ruby -rjson -e 'device_type_id = ARGV.fetch(0); runtimes = JSON.parse(STDIN.read).fetch("runtimes"); runtime = runtimes.select { |item| item["platform"] == "iOS" && item["isAvailable"] && item.fetch("supportedDeviceTypes", []).any? { |type| type["identifier"] == device_type_id } }.max_by { |item| item["version"].split(".").map(&:to_i) }; abort("No available iOS runtime supports #{device_type_id}") unless runtime; puts runtime["identifier"]' "$device_type_id"
+          )"
+          simulator_id="$(xcrun simctl create "MusicCount CI iPhone 17 Pro" "$device_type_id" "$runtime_id")"
+
+          echo "DESTINATION=platform=iOS Simulator,id=$simulator_id" >> "$GITHUB_ENV"
+          xcrun simctl boot "$simulator_id" || true
+          xcrun simctl bootstatus "$simulator_id" -b
 
       - name: Test full verification plan on iOS simulator
         run: |

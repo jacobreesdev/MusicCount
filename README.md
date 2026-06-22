@@ -88,14 +88,14 @@ Overkill for a side project? Maybe. But I wanted to learn how to test properly, 
 
 Pull requests to `master`, pushes to `master`, and manual workflow dispatches run `.github/workflows/ci.yml`. The required CI check is `MusicCount simulator tests`.
 
-The required check intentionally uses the checked-in Xcode workspace and test plan rather than host SwiftPM. It builds the app and test bundle for an iOS simulator, then runs the package tests plus one deterministic app-launch UI smoke test:
+The required check intentionally uses the checked-in Xcode workspace and test plan rather than host SwiftPM. It creates a per-run iPhone 17 Pro simulator from the latest available iOS runtime, builds the app and test bundle for that simulator, then runs the package tests plus one deterministic app-launch UI smoke test:
 
 ```sh
 xcodebuild build-for-testing \
   -workspace MusicLibraryVerification.xcworkspace \
   -scheme MusicLibraryVerification \
   -testPlan MusicLibraryVerification \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+  -destination "$DESTINATION" \
   -only-testing:MusicCountFeatureTests \
   -only-testing:MusicCountUITests/MusicLibraryVerificationUITests/testMockDataLaunchShowsLibraryAndSuggestions
 
@@ -103,7 +103,7 @@ xcodebuild test-without-building \
   -workspace MusicLibraryVerification.xcworkspace \
   -scheme MusicLibraryVerification \
   -testPlan MusicLibraryVerification \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+  -destination "$DESTINATION" \
   -only-testing:MusicCountFeatureTests \
   -only-testing:MusicCountUITests/MusicLibraryVerificationUITests/testMockDataLaunchShowsLibraryAndSuggestions
 ```
