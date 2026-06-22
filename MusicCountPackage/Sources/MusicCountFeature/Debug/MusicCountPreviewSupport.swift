@@ -134,7 +134,7 @@ private struct MusicCountPreviewEnvironmentModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .environment(musicLibraryService)
-            .environment(AppleMusicQueueService())
+            .environment(previewQueueService)
             .environment(suggestionsService)
             .environment(songsToRemovePlaylistService)
     }
@@ -154,6 +154,10 @@ private struct MusicCountPreviewEnvironmentModifier: ViewModifier {
             completedRepairs: completedRepairs
         )
         return service
+    }
+
+    private var previewQueueService: AppleMusicQueueService {
+        AppleMusicQueueService(queueClient: PreviewAppleMusicQueueClient())
     }
 
     private var songsToRemovePlaylistService: SongsToRemovePlaylistService {
@@ -187,6 +191,11 @@ extension View {
             )
         )
     }
+}
+
+@MainActor
+private final class PreviewAppleMusicQueueClient: AppleMusicQueueClient {
+    func addToQueue(song: SongInfo, count: Int, behavior: QueueBehavior) throws {}
 }
 
 @MainActor
