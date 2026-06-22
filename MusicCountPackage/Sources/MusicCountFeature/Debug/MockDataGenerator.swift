@@ -29,23 +29,10 @@ final class MockDataGenerator {
         let artworkMap = await artworkFetcher.fetchAllArtwork(for: uniqueAlbums)
         NSLog("✅ Fetched \(artworkMap.count) album artworks")
 
-        // Convert mock songs to SongInfo with artwork
-        let songs = MockSongData.songs.enumerated().map { (index, mockSong) -> SongInfo in
-            let artworkKey = "\(mockSong.artist)|\(mockSong.album)"
-            let artwork = artworkMap[artworkKey]
-
-            return SongInfo(
-                id: UInt64(index),
-                title: mockSong.title,
-                artist: mockSong.artist,
-                album: mockSong.album,
-                playCount: mockSong.playCount,
-                hasAssetURL: true,
-                mediaType: "Music",
-                duration: mockSong.duration,
-                artworkImage: artwork
-            )
-        }
+        let songs = MockScenarioCatalog.librarySongs(
+            artworkMap: artworkMap,
+            includingPreviewEdgeCases: false
+        )
 
         NSLog("✅ Generated \(songs.count) mock songs")
         return songs

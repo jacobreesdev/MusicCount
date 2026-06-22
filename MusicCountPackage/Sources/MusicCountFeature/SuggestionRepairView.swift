@@ -25,6 +25,28 @@ struct SuggestionRepairView: View {
         }
     }
 
+    #if DEBUG
+    init(
+        suggestion: Suggestion,
+        initialModel: SuggestionRepairModel,
+        isBuildingRepairQueue: Bool = false,
+        showingSuccessAlert: Bool = false,
+        showingErrorAlert: Bool = false,
+        successMessage: String = "",
+        errorMessage: String = "",
+        onDismiss: @escaping () -> Void = {}
+    ) {
+        self.suggestion = suggestion
+        self.onDismiss = onDismiss
+        _model = State(initialValue: initialModel)
+        _isBuildingRepairQueue = State(initialValue: isBuildingRepairQueue)
+        _showingSuccessAlert = State(initialValue: showingSuccessAlert)
+        _showingErrorAlert = State(initialValue: showingErrorAlert)
+        _successMessage = State(initialValue: successMessage)
+        _errorMessage = State(initialValue: errorMessage)
+    }
+    #endif
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -426,3 +448,112 @@ private extension SuggestionRepairSongRole {
         }
     }
 }
+
+#if DEBUG
+#Preview("Repair - Two Song Default") {
+    NavigationStack {
+        SuggestionRepairView(
+            suggestion: MusicCountPreviewData.shakeItOffSuggestion,
+            initialModel: MusicCountPreviewData.defaultRepairModel(
+                for: MusicCountPreviewData.shakeItOffSuggestion
+            )
+        )
+    }
+    .musicCountPreviewEnvironment()
+}
+
+#Preview("Repair - Multi Song Default Retired") {
+    NavigationStack {
+        SuggestionRepairView(
+            suggestion: MusicCountPreviewData.blindingLightsSuggestion,
+            initialModel: MusicCountPreviewData.defaultRepairModel(
+                for: MusicCountPreviewData.blindingLightsSuggestion
+            )
+        )
+    }
+    .musicCountPreviewEnvironment()
+}
+
+#Preview("Repair - Alternate Canonical Song") {
+    NavigationStack {
+        SuggestionRepairView(
+            suggestion: MusicCountPreviewData.blindingLightsSuggestion,
+            initialModel: MusicCountPreviewData.alternateCanonicalModel()
+        )
+    }
+    .musicCountPreviewEnvironment()
+}
+
+#Preview("Repair - Excluded Retired Song") {
+    NavigationStack {
+        SuggestionRepairView(
+            suggestion: MusicCountPreviewData.longMetadataSuggestion,
+            initialModel: MusicCountPreviewData.excludedRetiredSongModel()
+        )
+    }
+    .musicCountPreviewEnvironment()
+}
+
+#Preview("Repair - Zero Play Counts") {
+    NavigationStack {
+        SuggestionRepairView(
+            suggestion: MusicCountPreviewData.zeroPlayCountsSuggestion,
+            initialModel: MusicCountPreviewData.defaultRepairModel(
+                for: MusicCountPreviewData.zeroPlayCountsSuggestion
+            )
+        )
+    }
+    .musicCountPreviewEnvironment()
+}
+
+#Preview("Repair - Large Repair Amount") {
+    NavigationStack {
+        SuggestionRepairView(
+            suggestion: MusicCountPreviewData.largeRepairAmountSuggestion,
+            initialModel: MusicCountPreviewData.defaultRepairModel(
+                for: MusicCountPreviewData.largeRepairAmountSuggestion
+            )
+        )
+    }
+    .musicCountPreviewEnvironment()
+}
+
+#Preview("Repair Queue - Ready") {
+    NavigationStack {
+        SuggestionRepairView(
+            suggestion: MusicCountPreviewData.shakeItOffSuggestion,
+            initialModel: MusicCountPreviewData.defaultRepairModel(
+                for: MusicCountPreviewData.shakeItOffSuggestion
+            )
+        )
+    }
+    .musicCountPreviewEnvironment()
+}
+
+#Preview("Repair Queue - Building") {
+    NavigationStack {
+        SuggestionRepairView(
+            suggestion: MusicCountPreviewData.shakeItOffSuggestion,
+            initialModel: MusicCountPreviewData.defaultRepairModel(
+                for: MusicCountPreviewData.shakeItOffSuggestion
+            ),
+            isBuildingRepairQueue: true
+        )
+    }
+    .musicCountPreviewEnvironment()
+}
+
+#Preview("Repair Queue - Failure") {
+    NavigationStack {
+        SuggestionRepairView(
+            suggestion: MusicCountPreviewData.shakeItOffSuggestion,
+            initialModel: MusicCountPreviewData.defaultRepairModel(
+                for: MusicCountPreviewData.shakeItOffSuggestion
+            ),
+            showingErrorAlert: true,
+            errorMessage: "This preview shows a Repair Queue failure message."
+        )
+    }
+    .musicCountPreviewEnvironment()
+}
+#endif

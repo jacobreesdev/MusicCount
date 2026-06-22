@@ -193,6 +193,14 @@ final class SongsToRemovePlaylistService {
     }
 }
 
+#if DEBUG
+extension SongsToRemovePlaylistService {
+    func replaceSyncProblemForPreview(_ message: String?) {
+        syncProblem = message.map(SongsToRemovePlaylistSyncProblem.init(message:))
+    }
+}
+#endif
+
 @MainActor
 struct MusicKitSongsToRemovePlaylistClient: SongsToRemovePlaylistClient {
     private let itemIDResolver: SongsToRemoveMusicItemIDResolver

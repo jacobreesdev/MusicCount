@@ -249,3 +249,18 @@ final class SuggestionsService: Sendable {
         }
     }
 }
+
+#if DEBUG
+extension SuggestionsService {
+    func replaceStateForPreview(
+        allSuggestions: [Suggestion],
+        activeRepairs: [ActiveRepair] = [],
+        completedRepairs: [CompletedRepair] = []
+    ) {
+        dismissedKeys = []
+        self.allSuggestions = allSuggestions
+        self.activeRepairs = activeRepairs
+        self.completedRepairs = completedRepairs
+    }
+}
+#endif

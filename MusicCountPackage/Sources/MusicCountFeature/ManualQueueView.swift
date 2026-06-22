@@ -243,3 +243,14 @@ struct ManualQueueView: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("Manual Queue - Selected Library Song") {
+    @Previewable @State var showingManualQueue = true
+    ManualQueueView(
+        song: MusicCountPreviewData.longLibrarySong,
+        showingManualQueue: $showingManualQueue
+    )
+    .musicCountPreviewEnvironment()
+}
+#endif

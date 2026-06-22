@@ -9,7 +9,7 @@ struct LibraryTabView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
+            Group {-
                 switch service.authorizationState {
                 case .notDetermined:
                     unauthorizedView
@@ -274,3 +274,33 @@ struct LibraryTabView: View {
         return sortOption.sorted(filtered)
     }
 }
+
+#if DEBUG
+#Preview("Library - Populated") {
+    LibraryTabView()
+        .musicCountPreviewEnvironment()
+}
+
+#Preview("Library - Long Library Song Metadata") {
+    LibraryTabView()
+        .musicCountPreviewEnvironment(
+            loadingState: .loaded([
+                MusicCountPreviewData.longLibrarySong,
+            ])
+        )
+}
+
+#Preview("Library - Empty") {
+    LibraryTabView()
+        .musicCountPreviewEnvironment(
+            loadingState: .loaded([])
+        )
+}
+
+#Preview("Library - Error") {
+    LibraryTabView()
+        .musicCountPreviewEnvironment(
+            loadingState: .error("MusicCount could not load the preview music library.")
+        )
+}
+#endif

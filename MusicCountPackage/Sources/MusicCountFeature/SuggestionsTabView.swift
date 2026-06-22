@@ -566,3 +566,110 @@ enum SuggestionSortOption: String, CaseIterable, Identifiable, Sendable {
         }
     }
 }
+
+#if DEBUG
+#Preview("Suggestions - Loading") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            loadingState: .loading,
+            suggestions: []
+        )
+}
+
+#Preview("Suggestions - Empty") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            loadingState: .loaded([]),
+            suggestions: []
+        )
+}
+
+#Preview("Suggestions - Populated") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment()
+}
+
+#Preview("Suggestions - High Play Count Gap") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            suggestions: [MusicCountPreviewData.largeRepairAmountSuggestion]
+        )
+}
+
+#Preview("Suggestions - Long Library Song Metadata") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            suggestions: [MusicCountPreviewData.longMetadataSuggestion]
+        )
+}
+
+#Preview("Suggestions - Library Error") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            loadingState: .error("MusicCount could not load the preview music library."),
+            suggestions: []
+        )
+}
+
+#Preview("Suggestions - Access Denied") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            authorizationState: .denied,
+            loadingState: .idle,
+            suggestions: []
+        )
+}
+
+#Preview("Active Repairs - Queued") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            activeRepairs: [MusicCountPreviewData.activeRepairs[0]]
+        )
+}
+
+#Preview("Active Repairs - Multiple") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            activeRepairs: MusicCountPreviewData.activeRepairs
+        )
+}
+
+#Preview("Completed Repair - All Suggestions Reviewed") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            suggestions: [MusicCountPreviewData.blindingLightsSuggestion],
+            completedRepairs: [MusicCountPreviewData.completedRepair]
+        )
+}
+
+#Preview("Songs to Remove Playlist - Not Created") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            loadingState: .loaded([]),
+            suggestions: []
+        )
+}
+
+#Preview("Songs to Remove Playlist - Create Needed") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            activeRepairs: [MusicCountPreviewData.activeRepairs[0]]
+        )
+}
+
+#Preview("Songs to Remove Playlist - Sync Failure") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            activeRepairs: MusicCountPreviewData.activeRepairs,
+            playlistSyncProblem: "MusicCount could not update its app-owned Songs to Remove Playlist."
+        )
+}
+
+#Preview("Songs to Remove Playlist - Empty After Completion") {
+    SuggestionsTabView()
+        .musicCountPreviewEnvironment(
+            suggestions: [MusicCountPreviewData.blindingLightsSuggestion],
+            completedRepairs: [MusicCountPreviewData.completedRepair]
+        )
+}
+#endif
